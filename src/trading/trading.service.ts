@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Binance from 'binance-api-node';
+import Binance, { CandlesOptions } from 'binance-api-node';
 import * as _ from 'lodash';
+import { rsi, wema } from 'technicalindicators';
 
 @Injectable()
 export class TradingService {
@@ -15,35 +16,33 @@ export class TradingService {
   }
 
   async main() {
-    const { candles } = await this.getCandles();
-
-    const prices = candles.map((item) => Number(item.open));
-    const ma21 = this.smoothedMovingAverage(prices, 21);
-    const ma50 = this.smoothedMovingAverage(prices, 50);
-    const ma200 = this.smoothedMovingAverage(prices, 200);
-    const rsiList = this.calculateRSI(prices);
-    const rsi = rsiList[rsiList.length - 1];
-    if (ma21 > ma50 && ma50 > ma200 && rsi > 50) {
-      console.log('xxx-bull-market looking for long position');
-    } else if (ma21 < ma50 && ma50 < ma200 && rsi < 50) {
-      console.log('xxx-bear-market looking for short position');
-    } else {
-      console.log('xxx-sideway-market no trades');
-    }
-    console.log('xxx', {
-      rsi,
-      ma21,
-      ma50,
-      ma200,
+    this.theMovingAverageStrategy({
+      symbol: 'SOLUSDT',
+      interval: '1h',
+      limit: 200,
     });
   }
 
-  private async getCandles() {
-    const candles: any = await this.client.candles({
-      symbol: 'SOLUSDT',
-      interval: '15m',
-      limit: 500,
-    });
+  private async theMovingAverageStrategy(candleOptions: CandlesOptions) {
+    const { candles } = await this.getCandles(candleOptions);
+
+    const prices = candles.map((item) => Number(item.open));
+
+    const wema21Arr = wema({ values: prices, period: 21 });
+    const wema50Arr = wema({ values: prices, period: 50 });
+    const wema200Arr = wema({ values: prices, period: 200 });
+    const rsiArr = rsi({ values: prices, period: 14 });
+
+    const lastRSI = _.last(rsiArr);
+    const wema21 = _.last(wema21Arr);
+    const wema50 = _.last(wema50Arr);
+    const wema200 = _.last(wema200Arr);
+
+    console.log('xxx', { lastRSI, wema21, wema50, wema200 });
+  }
+
+  private async getCandles(candleOptions: CandlesOptions) {
+    const candles: any = await this.client.candles(candleOptions);
     const sortedCandles = _.orderBy(candles, ['closeTime'], ['desc']).map(
       (item) => ({
         ...item,
@@ -53,62 +52,29 @@ export class TradingService {
     return { candles, sortedCandles };
   }
 
-  private smoothedMovingAverage(inputData: number[], period: number): number[] {
-    console.log({ length: inputData.length, period });
+  private calculateSmoothedMovingAverage(
+    inputData: number[],
+    period: number,
+  ): number[] {
     if (inputData.length < period) return [];
-    const data = inputData.slice(-period);
 
     const smma: number[] = [];
+    let currentSMMA: number | null = null;
 
-    // Step 1: Compute the first SMMA (which is the SMA of the first N values)
-    const firstSum = data
-      .slice(0, period)
-      .reduce((sum, value) => sum + value, 0);
-    const firstSMMA = firstSum / period;
-    smma.push(firstSMMA);
-
-    // Step 2: Compute SMMA for the rest using the recursive formula
-    for (let i = period; i < data.length; i++) {
-      const prevSMMA = smma[smma.length - 1]; // Previous SMMA value
-      const currentSMMA = (prevSMMA * (period - 1) + data[i]) / period;
-      smma.push(currentSMMA);
+    for (let i = 0; i < inputData.length; i++) {
+      if (i < period) {
+        if (i === period - 1) {
+          currentSMMA =
+            inputData.slice(0, period).reduce((sum, val) => sum + val, 0) /
+            period;
+          smma.push(currentSMMA);
+        }
+      } else {
+        currentSMMA = (currentSMMA! * (period - 1) + inputData[i]) / period;
+        smma.push(currentSMMA);
+      }
     }
 
     return smma;
-  }
-
-  calculateRSI(data: number[], period: number = 14): number[] {
-    if (data.length < period) return [];
-
-    const rsi: number[] = [];
-    const gains: number[] = [];
-    const losses: number[] = [];
-
-    // Calculate gains and losses
-    for (let i = 1; i < data.length; i++) {
-      const change = data[i] - data[i - 1];
-      gains.push(change > 0 ? change : 0);
-      losses.push(change < 0 ? -change : 0);
-    }
-
-    // First Average Gain & Loss (Simple Moving Average)
-    let avgGain =
-      gains.slice(0, period).reduce((sum, g) => sum + g, 0) / period;
-    let avgLoss =
-      losses.slice(0, period).reduce((sum, l) => sum + l, 0) / period;
-
-    // Compute RSI for each point in the series
-    for (let i = period; i < gains.length; i++) {
-      // Smoothed Moving Average for Gains & Losses
-      avgGain = (avgGain * (period - 1) + gains[i]) / period;
-      avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
-
-      // Compute RS and RSI
-      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-      const rsiValue = 100 - 100 / (1 + rs);
-      rsi.push(rsiValue);
-    }
-
-    return rsi;
   }
 }
