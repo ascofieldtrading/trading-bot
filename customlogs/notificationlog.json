@@ -1,0 +1,18 @@
+{
+  "5m": {
+    "marketTrend": "Sideway",
+    "notifiedAt": "2025-02-12T17:10:30.176Z"
+  },
+  "1h": {
+    "marketTrend": "Bearish",
+    "notifiedAt": "2025-02-12T17:10:30.169Z"
+  },
+  "4h": {
+    "marketTrend": "Bearish",
+    "notifiedAt": "2025-02-12T17:10:30.165Z"
+  },
+  "15m": {
+    "marketTrend": "Sideway",
+    "notifiedAt": "2025-02-12T17:10:30.257Z"
+  }
+}

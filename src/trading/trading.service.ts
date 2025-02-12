@@ -8,18 +8,18 @@ import * as _ from 'lodash';
 import moment from 'moment';
 import { NotificationService } from 'src/notification/notification.service';
 import { rsi, wema } from 'technicalindicators';
+import { NOTIFICATION_LOG_FILE_PATH } from './constant';
 import { MarketTrend } from './enum';
 import { NotificationLog, NotificationMessage } from './interface';
 import { Interval } from './type';
 
-moment().subtract(15, 'M');
 @Injectable()
 export class TradingService implements OnModuleInit {
   private readonly logger = new Logger(TradingService.name);
   private priceLimit = 500;
   private client: import('binance-api-node').Binance;
   private intervals: Interval[] = ['15m'];
-  private notificationLog: NotificationLog;
+  private notificationLog: NotificationLog = {} as NotificationLog;
 
   constructor(
     private configService: ConfigService,
@@ -35,7 +35,6 @@ export class TradingService implements OnModuleInit {
     if (interfalsConfig) {
       this.intervals = interfalsConfig.split(',') as Interval[];
     }
-    this.loadNotificationLog();
   }
 
   async onModuleInit() {
@@ -47,6 +46,9 @@ export class TradingService implements OnModuleInit {
 
     this.schedulerRegistry.addCronJob('dynamicJob', job);
     job.start();
+    this.notificationService.simpleNotify([
+      'Trading Bot started successfully!',
+    ]);
   }
 
   async main() {
@@ -100,7 +102,7 @@ export class TradingService implements OnModuleInit {
       return;
     }
     const wemaValues = data.lastWEMA.reduce(
-      (prev, current, i) => ({ ...prev, [`WEMA${i + 1}`]: current.toFixed(4) }),
+      (prev, current, i) => ({ ...prev, [`MA${i + 1}`]: current.toFixed(4) }),
       {},
     );
     await this.notificationService.simpleNotify({
@@ -123,7 +125,7 @@ export class TradingService implements OnModuleInit {
       notifiedAt: new Date().toISOString(),
     };
     fs.writeFileSync(
-      './logs/notificationlog.json',
+      NOTIFICATION_LOG_FILE_PATH,
       JSON.stringify(this.notificationLog, null, 2),
       'utf-8',
     );
@@ -165,7 +167,7 @@ export class TradingService implements OnModuleInit {
   }
 
   private loadNotificationLog() {
-    const content = fs.readFileSync('./logs/notificationlog.json', 'utf-8');
+    const content = fs.readFileSync(NOTIFICATION_LOG_FILE_PATH, 'utf-8');
     this.notificationLog = JSON.parse(content);
   }
 }

@@ -17,3 +17,5 @@ export const intervals: Interval[] = [
   '1w',
   '1M',
 ];
+
+export const NOTIFICATION_LOG_FILE_PATH = './customlogs/notificationlog.json';
