@@ -1,80 +1,171 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import Binance, { CandlesOptions } from 'binance-api-node';
+import { CronJob } from 'cron';
+import fs from 'fs';
 import * as _ from 'lodash';
+import moment from 'moment';
+import { NotificationService } from 'src/notification/notification.service';
 import { rsi, wema } from 'technicalindicators';
+import { MarketTrend } from './enum';
+import { NotificationLog, NotificationMessage } from './interface';
+import { Interval } from './type';
 
+moment().subtract(15, 'M');
 @Injectable()
-export class TradingService {
+export class TradingService implements OnModuleInit {
+  private readonly logger = new Logger(TradingService.name);
+  private priceLimit = 500;
   private client: import('binance-api-node').Binance;
+  private intervals: Interval[] = ['15m'];
+  private notificationLog: NotificationLog;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly notificationService: NotificationService,
+  ) {
     this.client = Binance({
       apiKey: configService.get('BINANCE_API_KEY'),
       apiSecret: configService.get('BINANCE_SECRET_KEY'),
     });
+
+    const interfalsConfig = configService.get<string>('INTERVALS');
+    if (interfalsConfig) {
+      this.intervals = interfalsConfig.split(',') as Interval[];
+    }
+    this.loadNotificationLog();
+  }
+
+  async onModuleInit() {
+    const cronExpression =
+      this.configService.get<string>('SCHEDULED_CRON_VALUE') || '0 * * * * *';
+    this.logger.verbose(`Using cron schedule: ${cronExpression}`);
+
+    const job = new CronJob(cronExpression, this.main.bind(this));
+
+    this.schedulerRegistry.addCronJob('dynamicJob', job);
+    job.start();
   }
 
   async main() {
-    this.theMovingAverageStrategy({
-      symbol: 'SOLUSDT',
-      interval: '1h',
-      limit: 200,
+    this.logger.verbose(`All intervals: ${this.intervals}`);
+    this.intervals.forEach((interval) => {
+      this.theMovingAverageStrategy({
+        symbol: 'SOLUSDT',
+        interval: interval,
+      });
     });
   }
 
   private async theMovingAverageStrategy(candleOptions: CandlesOptions) {
-    const { candles } = await this.getCandles(candleOptions);
-
+    const candles = await this.getCandles({
+      ...candleOptions,
+      limit: this.priceLimit,
+    });
     const prices = candles.map((item) => Number(item.open));
-
-    const wema21Arr = wema({ values: prices, period: 21 });
-    const wema50Arr = wema({ values: prices, period: 50 });
-    const wema200Arr = wema({ values: prices, period: 200 });
-    const rsiArr = rsi({ values: prices, period: 14 });
-
-    const lastRSI = _.last(rsiArr);
-    const wema21 = _.last(wema21Arr);
-    const wema50 = _.last(wema50Arr);
-    const wema200 = _.last(wema200Arr);
-
-    console.log('xxx', { lastRSI, wema21, wema50, wema200 });
-  }
-
-  private async getCandles(candleOptions: CandlesOptions) {
-    const candles: any = await this.client.candles(candleOptions);
-    const sortedCandles = _.orderBy(candles, ['closeTime'], ['desc']).map(
-      (item) => ({
-        ...item,
-        closeTime: new Date(item.closeTime),
-      }),
+    const periods = [21, 50, 200];
+    const wemaResultList = periods.map((period) =>
+      wema({ values: prices, period: period }),
     );
-    return { candles, sortedCandles };
+    const lastWEMA = wemaResultList.map((item) => _.last(item));
+    const rsiResultList = rsi({ values: prices, period: 14 });
+    const lastRSI = _.last(rsiResultList);
+
+    const marketTrend = this.getMarketTrend(wemaResultList, rsiResultList);
+    const messageData: NotificationMessage = {
+      interval: candleOptions.interval,
+      marketTrend,
+      lastRSI,
+      lastWEMA,
+    };
+    try {
+      await this.handleNotification(messageData);
+      this.updateAndSaveNotificationLog(candleOptions.interval, marketTrend);
+    } catch (e) {
+      this.logger.error(`Failed to notify and save: ${candleOptions.interval}`);
+    }
   }
 
-  private calculateSmoothedMovingAverage(
-    inputData: number[],
-    period: number,
-  ): number[] {
-    if (inputData.length < period) return [];
-
-    const smma: number[] = [];
-    let currentSMMA: number | null = null;
-
-    for (let i = 0; i < inputData.length; i++) {
-      if (i < period) {
-        if (i === period - 1) {
-          currentSMMA =
-            inputData.slice(0, period).reduce((sum, val) => sum + val, 0) /
-            period;
-          smma.push(currentSMMA);
-        }
-      } else {
-        currentSMMA = (currentSMMA! * (period - 1) + inputData[i]) / period;
-        smma.push(currentSMMA);
-      }
+  private async handleNotification(data: NotificationMessage) {
+    const lastNotification = this.notificationLog[data.interval];
+    const lastNotified = lastNotification
+      ? moment(lastNotification.notifiedAt)
+      : undefined;
+    if (lastNotified && lastNotification.marketTrend === data.marketTrend) {
+      this.logger.verbose(
+        `Skip notication: ${data.interval}. Market trend: ${data.marketTrend}`,
+      );
+      return;
     }
+    const wemaValues = data.lastWEMA.reduce(
+      (prev, current, i) => ({ ...prev, [`WEMA${i + 1}`]: current.toFixed(4) }),
+      {},
+    );
+    await this.notificationService.simpleNotify({
+      Interval: data.interval,
+      Trend: data.marketTrend,
+      ...wemaValues,
+      RSI: data.lastRSI,
+    });
+    this.logger.verbose(
+      `Notified with message: ${JSON.stringify(data, null, 2)}`,
+    );
+  }
 
-    return smma;
+  private updateAndSaveNotificationLog(
+    timeFrame: Interval,
+    marketTrend: MarketTrend,
+  ) {
+    this.notificationLog[timeFrame] = {
+      marketTrend,
+      notifiedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(
+      './logs/notificationlog.json',
+      JSON.stringify(this.notificationLog, null, 2),
+      'utf-8',
+    );
+  }
+
+  private getMarketTrend(
+    wemaResultList: number[][],
+    rsiList: number[],
+  ): MarketTrend {
+    const lastValues = wemaResultList.map((item) => _.last(item));
+    const lastRSIValue = _.last(rsiList);
+
+    const getWEMATrend = () => {
+      const wemaTrendNumber = lastValues.reduce((prev, current, i) => {
+        if (!i) return 0;
+        if (current == lastValues[i - 1]) return prev;
+        return prev + (current < lastValues[i - 1] ? 1 : -1);
+      }, 0);
+
+      if (Math.abs(wemaTrendNumber) !== lastValues.length - 1)
+        return MarketTrend.Sideway;
+      return wemaTrendNumber > 0 ? MarketTrend.Bullish : MarketTrend.Bearish;
+    };
+    const getRSITrend = () => {
+      if (lastRSIValue == 50) return MarketTrend.Sideway;
+      return lastRSIValue > 50 ? MarketTrend.Bullish : MarketTrend.Bearish;
+    };
+
+    const trends = [getWEMATrend(), getRSITrend()];
+    if (_.isEqual(_.uniq(trends), [MarketTrend.Bearish]))
+      return MarketTrend.Bearish;
+    if (_.isEqual(_.uniq(trends), [MarketTrend.Bullish]))
+      return MarketTrend.Bullish;
+    return MarketTrend.Sideway;
+  }
+
+  private getCandles(candleOptions: CandlesOptions) {
+    return this.client.candles(candleOptions);
+  }
+
+  private loadNotificationLog() {
+    const content = fs.readFileSync('./logs/notificationlog.json', 'utf-8');
+    this.notificationLog = JSON.parse(content);
   }
 }

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TradingModule } from './trading/trading.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { TradingModule } from './trading/trading.module';
       envFilePath: '.env',
     }),
     TradingModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
