@@ -1,10 +1,6 @@
-import { config } from 'dotenv';
-import { AppConfig } from 'src/common/interface';
 import { Interval } from 'src/common/types';
 
-config();
-
-const appConfig: AppConfig = {
+export default () => ({
   binanceApiKey: process.env.BINANCE_API_KEY,
   binanceSecretKey: process.env.BINANCE_SECRET_KEY,
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
@@ -23,6 +19,4 @@ const appConfig: AppConfig = {
     ? (process.env.INTERVALS.split(',') as Interval[])
     : ['15m'],
   symbols: process.env.INTERVALS ? process.env.SYMBOLS.split(',') : ['SOLUSDT'],
-};
-
-export default () => appConfig;
+});

@@ -38,4 +38,8 @@ export class NotificationService {
     };
     return this.bot.sendMessage(this.chatId, getMessage());
   }
+
+  async getUpdates() {
+    this.logger.verbose(await this.bot.getUpdates());
+  }
 }

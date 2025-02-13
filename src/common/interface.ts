@@ -21,10 +21,11 @@ export interface Trend {
 }
 
 export type NotificationLog = {
+  notifiedAt: string;
+} & Trend;
+export type NotificationLogs = {
   [key in Interval]: {
-    [key in string]: {
-      notifiedAt: string;
-    } & Trend;
+    [key in string]: NotificationLog;
   };
 };
 

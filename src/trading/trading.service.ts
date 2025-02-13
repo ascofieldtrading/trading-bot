@@ -10,6 +10,7 @@ import {
   AppConfig,
   NotificationData,
   NotificationLog,
+  NotificationLogs,
 } from 'src/common/interface';
 import { NotificationService } from 'src/notification/notification.service';
 import { rsi, wema } from 'technicalindicators';
@@ -20,7 +21,7 @@ export class TradingService implements OnModuleInit {
   private readonly logger = new Logger(TradingService.name);
   private client: import('binance-api-node').Binance;
 
-  private notificationLog: NotificationLog = {} as NotificationLog;
+  private notificationLogs: NotificationLogs = {} as NotificationLogs;
 
   constructor(
     private configService: ConfigService<AppConfig>,
@@ -31,28 +32,47 @@ export class TradingService implements OnModuleInit {
       apiKey: configService.get('binanceApiKey'),
       apiSecret: configService.get('binanceSecretKey'),
     });
-    !this.configService.get('notificationOnStart') &&
-      this.loadNotificationLog();
   }
 
   async onModuleInit() {
-    this.logger.verbose(
-      `Using cron schedule: ${this.configService.get('scheduledCronValue')}`,
-    );
-
-    const job = new CronJob(
-      this.configService.get('scheduledCronValue'),
-      this.main.bind(this),
-    );
-
-    this.schedulerRegistry.addCronJob('dynamicJob', job);
-    job.start();
     this.notificationService.simpleNotify([
       'Trading Bot started successfully!',
     ]);
+    this.configService.get('notificationOnStart') &&
+      (await this.notifyInitialStatus());
+
+    const initScheduleJob = () => {
+      this.logger.verbose(
+        `Init schedule check and notify - using cron schedule: ${this.configService.get('scheduledCronValue')}`,
+      );
+
+      const job = new CronJob(
+        this.configService.get('scheduledCronValue'),
+        this.checkAndNotifyStatus.bind(this),
+      );
+
+      this.schedulerRegistry.addCronJob('dynamicJob', job);
+      job.start();
+    };
+    initScheduleJob();
   }
 
-  async main() {
+  async notifyInitialStatus() {
+    this.logger.verbose('Notify initial status');
+    this.logger.verbose(
+      `All intervals: ${this.configService.get('intervals')}`,
+    );
+    for (const symbol of this.configService.get('symbols')) {
+      for (const interval of this.configService.get('intervals')) {
+        await this.theMovingAverageStrategy({
+          symbol,
+          interval,
+        });
+      }
+    }
+  }
+
+  private async checkAndNotifyStatus() {
     this.logger.verbose(
       `All intervals: ${this.configService.get('intervals')}`,
     );
@@ -92,26 +112,15 @@ export class TradingService implements OnModuleInit {
   }
 
   private async handleNotification(data: NotificationData) {
-    const lastNotification = this.notificationLog[data.interval]?.[data.symbol];
-    const triggerNotificationIfNeeded = async () => {
-      if (
-        lastNotification &&
-        (lastNotification.trend === data.trend ||
-          lastNotification.trend === data.maTrend)
-      ) {
-        this.logger.verbose(
-          `Skip notication: ${data.symbol} - ${data.interval}. Market trend: ${data.trend}`,
-        );
-        return;
-      }
+    const lastNotification =
+      this.notificationLogs[data.interval]?.[data.symbol];
+    const notify = async () => {
       const maValues = data.lastMA.reduce(
         (prev, current, i) => ({ ...prev, [`MA${i + 1}`]: current.toFixed(4) }),
         {},
       );
       const messageObj = {
-        Symbol: data.symbol,
-        Trend: data.trend,
-        Interval: data.interval,
+        [data.symbol]: `${data.interval} - ${data.trend}`,
         ...maValues,
         RSI: data.lastRSI,
       };
@@ -122,21 +131,38 @@ export class TradingService implements OnModuleInit {
     };
 
     try {
-      await triggerNotificationIfNeeded();
+      if (this.shouldNotify(lastNotification, data)) {
+        await notify();
+      } else {
+        this.logger.verbose(
+          `Skip notication: ${data.symbol} - ${data.interval}. Market trend: ${data.trend}`,
+        );
+      }
       this.updateAndSaveNotificationLog(data);
     } catch (e) {
       this.logger.error(`Failed to notify and save logs: ${data.interval}`);
     }
   }
 
+  private shouldNotify(
+    notificationLog: NotificationLog,
+    data: NotificationData,
+  ) {
+    return (
+      !notificationLog ||
+      (notificationLog.trend !== data.trend &&
+        notificationLog.trend !== data.maTrend)
+    );
+  }
+
   private updateAndSaveNotificationLog(data: NotificationData) {
-    _.set(this.notificationLog, `${data.interval}.${data.symbol}`, {
+    _.set(this.notificationLogs, `${data.interval}.${data.symbol}`, {
       notifiedAt: new Date().toISOString(),
       ...data,
     });
     fs.writeFileSync(
       NOTIFICATION_LOG_FILE_PATH,
-      JSON.stringify(this.notificationLog, null, 2),
+      JSON.stringify(this.notificationLogs, null, 2),
       'utf-8',
     );
   }
@@ -174,10 +200,5 @@ export class TradingService implements OnModuleInit {
 
   private getCandles(candleOptions: CandlesOptions) {
     return this.client.candles(candleOptions);
-  }
-
-  private loadNotificationLog() {
-    const content = fs.readFileSync(NOTIFICATION_LOG_FILE_PATH, 'utf-8');
-    this.notificationLog = JSON.parse(content);
   }
 }

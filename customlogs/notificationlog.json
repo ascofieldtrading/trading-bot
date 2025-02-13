@@ -1,28 +1,118 @@
 {
-  "15m": {
-    "BTCUSDT": {
-      "notifiedAt": "2025-02-13T07:13:00.234Z",
-      "symbol": "BTCUSDT",
-      "interval": "15m",
-      "lastRSI": 21.96,
+  "5m": {
+    "SOLUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.187Z",
+      "symbol": "SOLUSDT",
+      "interval": "5m",
+      "lastRSI": 45.11,
       "lastMA": [
-        97079.03165218202,
-        96885.36087669242,
-        96744.37466147864
+        191.43847835870196,
+        192.12309676760748,
+        194.08934221120714
       ],
-      "trend": "Sideway",
-      "maTrend": "Bullish",
+      "trend": "Bearish",
+      "maTrend": "Bearish",
       "rsiTrend": "Bearish"
     },
+    "BTCUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.222Z",
+      "symbol": "BTCUSDT",
+      "interval": "5m",
+      "lastRSI": 42.53,
+      "lastMA": [
+        95975.9654448813,
+        96113.73493099707,
+        96392.91134177172
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    }
+  },
+  "15m": {
     "SOLUSDT": {
-      "notifiedAt": "2025-02-13T07:13:00.241Z",
+      "notifiedAt": "2025-02-13T16:14:20.193Z",
       "symbol": "SOLUSDT",
       "interval": "15m",
-      "lastRSI": 33.37,
+      "lastRSI": 49.92,
       "lastMA": [
-        195.81452920629576,
-        195.92007739407802,
-        197.94536083618152
+        192.48297083640895,
+        193.88888801652325,
+        197.23471601228178
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    },
+    "BTCUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.215Z",
+      "symbol": "BTCUSDT",
+      "interval": "15m",
+      "lastRSI": 47.75,
+      "lastMA": [
+        96199.78831319825,
+        96442.91941332995,
+        96635.37187704758
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    }
+  },
+  "1h": {
+    "SOLUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.198Z",
+      "symbol": "SOLUSDT",
+      "interval": "1h",
+      "lastRSI": 42.04,
+      "lastMA": [
+        194.9178640387242,
+        197.1540402858581,
+        209.4774392079605
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    },
+    "BTCUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.284Z",
+      "symbol": "BTCUSDT",
+      "interval": "1h",
+      "lastRSI": 43.51,
+      "lastMA": [
+        96518.34042680389,
+        96722.89738073529,
+        98644.22415627241
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    }
+  },
+  "4h": {
+    "SOLUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.207Z",
+      "symbol": "SOLUSDT",
+      "interval": "4h",
+      "lastRSI": 41.19,
+      "lastMA": [
+        199.12495324170553,
+        207.69549695930056,
+        216.36104417919245
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    },
+    "BTCUSDT": {
+      "notifiedAt": "2025-02-13T16:14:20.243Z",
+      "symbol": "BTCUSDT",
+      "interval": "4h",
+      "lastRSI": 45.16,
+      "lastMA": [
+        97034.30162277972,
+        98403.9446676085,
+        99007.214869702
       ],
       "trend": "Bearish",
       "maTrend": "Bearish",
