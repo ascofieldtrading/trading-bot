@@ -22,16 +22,19 @@ export class NotificationService {
       this.logger.verbose('Notification is disabled. Skip sending message');
       return;
     }
-    let message = '';
-    if (Array.isArray(data)) {
-      data.forEach((val) => {
-        message += `${val}\n`;
-      });
-    } else {
+    const getMessage = () => {
+      let message = '';
+      if (Array.isArray(data)) {
+        data.forEach((val) => {
+          message += `${val}\n`;
+        });
+        return message;
+      }
       for (const key in data) {
         message += `${key}: ${data[key]}\n`;
       }
-    }
-    return this.bot.sendMessage(this.chatId, message);
+      return message;
+    };
+    return this.bot.sendMessage(this.chatId, getMessage());
   }
 }

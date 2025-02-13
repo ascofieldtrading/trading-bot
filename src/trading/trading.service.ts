@@ -10,7 +10,7 @@ import { NotificationService } from 'src/notification/notification.service';
 import { rsi, wema } from 'technicalindicators';
 import { NOTIFICATION_LOG_FILE_PATH } from './constant';
 import { MarketTrend } from './enum';
-import { NotificationLog, NotificationMessage } from './interface';
+import { NotificationLog, NotificationMessage, Trend } from './interface';
 import { Interval } from './type';
 
 @Injectable()
@@ -34,6 +34,13 @@ export class TradingService implements OnModuleInit {
     const interfalsConfig = configService.get<string>('INTERVALS');
     if (interfalsConfig) {
       this.intervals = interfalsConfig.split(',') as Interval[];
+    }
+
+    const notificationOnStart =
+      configService.get<string>('NOTIFICATION_ON_START').toLowerCase() ===
+      'true';
+    if (!notificationOnStart) {
+      this.loadNotificationLog();
     }
   }
 
@@ -75,16 +82,16 @@ export class TradingService implements OnModuleInit {
     const rsiResultList = rsi({ values: prices, period: 14 });
     const lastRSI = _.last(rsiResultList);
 
-    const marketTrend = this.getMarketTrend(wemaResultList, rsiResultList);
+    const trend = this.getMarketTrend(wemaResultList, rsiResultList);
     const messageData: NotificationMessage = {
       interval: candleOptions.interval,
-      marketTrend,
       lastRSI,
       lastWEMA,
+      ...trend,
     };
     try {
       await this.handleNotification(messageData);
-      this.updateAndSaveNotificationLog(candleOptions.interval, marketTrend);
+      this.updateAndSaveNotificationLog(candleOptions.interval, trend);
     } catch (e) {
       this.logger.error(`Failed to notify and save: ${candleOptions.interval}`);
     }
@@ -95,9 +102,14 @@ export class TradingService implements OnModuleInit {
     const lastNotified = lastNotification
       ? moment(lastNotification.notifiedAt)
       : undefined;
-    if (lastNotified && lastNotification.marketTrend === data.marketTrend) {
+
+    if (
+      lastNotified &&
+      (lastNotification.trend === data.trend ||
+        lastNotification.trend === data.maTrend)
+    ) {
       this.logger.verbose(
-        `Skip notication: ${data.interval}. Market trend: ${data.marketTrend}`,
+        `Skip notication: ${data.interval}. Market trend: ${data.trend}`,
       );
       return;
     }
@@ -107,7 +119,7 @@ export class TradingService implements OnModuleInit {
     );
     await this.notificationService.simpleNotify({
       Interval: data.interval,
-      Trend: data.marketTrend,
+      Trend: data.trend,
       ...wemaValues,
       RSI: data.lastRSI,
     });
@@ -116,13 +128,10 @@ export class TradingService implements OnModuleInit {
     );
   }
 
-  private updateAndSaveNotificationLog(
-    timeFrame: Interval,
-    marketTrend: MarketTrend,
-  ) {
+  private updateAndSaveNotificationLog(timeFrame: Interval, trend: Trend) {
     this.notificationLog[timeFrame] = {
-      marketTrend,
       notifiedAt: new Date().toISOString(),
+      ...trend,
     };
     fs.writeFileSync(
       NOTIFICATION_LOG_FILE_PATH,
@@ -131,10 +140,7 @@ export class TradingService implements OnModuleInit {
     );
   }
 
-  private getMarketTrend(
-    wemaResultList: number[][],
-    rsiList: number[],
-  ): MarketTrend {
+  private getMarketTrend(wemaResultList: number[][], rsiList: number[]) {
     const lastValues = wemaResultList.map((item) => _.last(item));
     const lastRSIValue = _.last(rsiList);
 
@@ -154,12 +160,15 @@ export class TradingService implements OnModuleInit {
       return lastRSIValue > 50 ? MarketTrend.Bullish : MarketTrend.Bearish;
     };
 
-    const trends = [getWEMATrend(), getRSITrend()];
+    const maTrend = getWEMATrend();
+    const rsiTrend = getRSITrend();
+    let trend = MarketTrend.Sideway;
+    const trends = [maTrend, rsiTrend];
     if (_.isEqual(_.uniq(trends), [MarketTrend.Bearish]))
-      return MarketTrend.Bearish;
+      trend = MarketTrend.Bearish;
     if (_.isEqual(_.uniq(trends), [MarketTrend.Bullish]))
-      return MarketTrend.Bullish;
-    return MarketTrend.Sideway;
+      trend = MarketTrend.Bullish;
+    return { trend: trend, maTrend, rsiTrend };
   }
 
   private getCandles(candleOptions: CandlesOptions) {

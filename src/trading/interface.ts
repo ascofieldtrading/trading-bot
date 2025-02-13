@@ -1,16 +1,20 @@
 import { MarketTrend } from './enum';
 import { Interval } from './type';
 
+export interface Trend {
+  trend: MarketTrend;
+  maTrend: MarketTrend;
+  rsiTrend: MarketTrend;
+}
+
 export type NotificationLog = {
   [key in Interval]: {
     notifiedAt: string;
-    marketTrend: MarketTrend;
-  };
+  } & Trend;
 };
 
-export interface NotificationMessage {
+export interface NotificationMessage extends Trend {
   interval: Interval;
-  marketTrend: MarketTrend;
   lastRSI: number;
   lastWEMA: number[];
 }
