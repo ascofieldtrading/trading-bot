@@ -1,8 +1,32 @@
 {
-  "1m": {
-    "notifiedAt": "2025-02-13T01:35:20.194Z",
-    "trend": "Bullish",
-    "maTrend": "Bullish",
-    "rsiTrend": "Bullish"
+  "15m": {
+    "BTCUSDT": {
+      "notifiedAt": "2025-02-13T07:13:00.234Z",
+      "symbol": "BTCUSDT",
+      "interval": "15m",
+      "lastRSI": 21.96,
+      "lastMA": [
+        97079.03165218202,
+        96885.36087669242,
+        96744.37466147864
+      ],
+      "trend": "Sideway",
+      "maTrend": "Bullish",
+      "rsiTrend": "Bearish"
+    },
+    "SOLUSDT": {
+      "notifiedAt": "2025-02-13T07:13:00.241Z",
+      "symbol": "SOLUSDT",
+      "interval": "15m",
+      "lastRSI": 33.37,
+      "lastMA": [
+        195.81452920629576,
+        195.92007739407802,
+        197.94536083618152
+      ],
+      "trend": "Bearish",
+      "maTrend": "Bearish",
+      "rsiTrend": "Bearish"
+    }
   }
 }

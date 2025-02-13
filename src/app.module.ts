@@ -4,12 +4,13 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TradingModule } from './trading/trading.module';
 import { NotificationModule } from './notification/notification.module';
+import configuration from 'config/configuration';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      load: [configuration],
     }),
     TradingModule,
     NotificationModule,

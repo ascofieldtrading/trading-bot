@@ -1,4 +1,4 @@
-import { Interval } from './type';
+import { Interval } from './types';
 
 export const intervals: Interval[] = [
   '1m',

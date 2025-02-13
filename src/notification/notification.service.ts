@@ -31,7 +31,8 @@ export class NotificationService {
         return message;
       }
       for (const key in data) {
-        message += `${key}: ${data[key]}\n`;
+        const value = data[key] ? `: ${data[key]}\n` : '';
+        message += `${key}${value}`;
       }
       return message;
     };
