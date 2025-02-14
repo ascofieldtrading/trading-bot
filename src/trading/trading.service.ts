@@ -16,8 +16,8 @@ import {
   Trend,
 } from '../common/interface';
 import { NotificationService } from '../notification/notification.service';
-
-process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
+import { BotService } from '../bot/bot.service';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class TradingService implements OnModuleInit {
@@ -30,6 +30,8 @@ export class TradingService implements OnModuleInit {
     private configService: ConfigService<AppConfig>,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly notificationService: NotificationService,
+    private readonly botService: BotService,
+    private readonly userService: UserService,
   ) {
     this.client = Binance({
       apiKey: configService.get('binanceApiKey'),
@@ -38,6 +40,24 @@ export class TradingService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    this.botService.listenCommands({
+      onStart: async (msg) => {
+        const user = await this.userService.createUserIfNotExists(msg);
+        await this.userService.enableUserNotification(user);
+        await this.botService.sendMessage(
+          user.telegramChatId,
+          'Notification is enabled!',
+        );
+      },
+      onStop: async (msg) => {
+        const user = await this.userService.createUserIfNotExists(msg);
+        await this.userService.disableUserNotification(user);
+        await this.botService.sendMessage(
+          user.telegramChatId,
+          'Notification is disabled!',
+        );
+      },
+    });
     this.notificationService.simpleNotify([
       'Trading Bot started successfully!',
     ]);
@@ -128,7 +148,9 @@ export class TradingService implements OnModuleInit {
         {},
       );
       const messageObj = {
-        [data.symbol]: `${data.interval} - ${data.trend}`,
+        Symbol: [data.symbol],
+        Interval: data.interval,
+        Trend: data.trend,
         ...maValues,
         RSI: data.lastRSI,
       };
@@ -159,7 +181,8 @@ export class TradingService implements OnModuleInit {
     return (
       !notificationLog ||
       (data.trend !== notificationLog.trend &&
-        data.trend !== notificationLog.maTrend)
+        (data.trend === MarketTrend.Sideway ||
+          data.trend !== notificationLog.maTrend))
     );
   }
 

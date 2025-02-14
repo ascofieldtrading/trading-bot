@@ -1,10 +1,16 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import configuration from '../config/configuration';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { NotificationModule } from './notification/notification.module';
 import { TradingModule } from './trading/trading.module';
+import { BotModule } from './bot/bot.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppConfig, DatabaseConfig } from './common/interface';
+import { UserModule } from './user/user.module';
+import { UserEntity } from './user/entity/user.entity';
+import { UserConfigEntity } from './user/entity/userconfig.entity';
 
 @Module({
   imports: [
@@ -13,8 +19,28 @@ import { TradingModule } from './trading/trading.module';
       load: [configuration],
       envFilePath: `${process.cwd()}/config/env/${process.env.NODE_ENV}.env`,
     }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService<AppConfig>) => {
+        const database = configService.get<DatabaseConfig>('database');
+        return {
+          type: 'postgres',
+          host: database.host,
+          port: database.port,
+          username: database.username,
+          password: database.password,
+          database: database.name,
+          entities: [UserEntity, UserConfigEntity],
+          synchronize: true,
+          ssl: { rejectUnauthorized: false },
+        };
+      },
+    }),
     TradingModule,
     NotificationModule,
+    BotModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

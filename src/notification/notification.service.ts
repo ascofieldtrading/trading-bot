@@ -1,16 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import TelegramBot from 'node-telegram-bot-api';
+import { BotService } from '../bot/bot.service';
 
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
   private chatId = 0;
-  private bot: TelegramBot;
   private notificationEnabled: boolean;
 
-  constructor(private configService: ConfigService) {
-    this.bot = new TelegramBot(configService.get('TELEGRAM_BOT_TOKEN'));
+  constructor(
+    private configService: ConfigService,
+    private botService: BotService,
+  ) {
     this.chatId = configService.get('TELEGRAM_CHAT_ID');
     this.notificationEnabled =
       configService.get<string>('NOTIFICATION_ENABLED').toLowerCase() ===
@@ -36,10 +37,10 @@ export class NotificationService {
       }
       return message;
     };
-    return this.bot.sendMessage(this.chatId, getMessage());
+    return this.botService.sendMessage(this.chatId, getMessage());
   }
 
   async getUpdates() {
-    this.logger.verbose(await this.bot.getUpdates());
+    this.logger.verbose(await this.botService.bot.getUpdates());
   }
 }

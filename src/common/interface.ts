@@ -1,5 +1,12 @@
 import { MarketTrend } from './enums';
 import { Interval } from './types';
+export interface DatabaseConfig {
+  host: string;
+  port: number;
+  name: string;
+  username: string;
+  password: string;
+}
 
 export interface AppConfig {
   binanceApiKey: string;
@@ -12,6 +19,7 @@ export interface AppConfig {
   symbols: string[];
   notificationEnabled: boolean;
   notificationOnStart: boolean;
+  database: DatabaseConfig;
 }
 
 export interface Trend {
