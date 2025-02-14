@@ -5,16 +5,16 @@ import Binance, { CandlesOptions } from 'binance-api-node';
 import { CronJob } from 'cron';
 import fs from 'fs';
 import * as _ from 'lodash';
-import { NOTIFICATION_LOG_FILE_PATH } from 'src/common/constant';
+import { rsi, wema } from 'technicalindicators';
+import { NOTIFICATION_LOG_FILE_PATH } from '../common/constant';
+import { MarketTrend } from '../common/enums';
 import {
   AppConfig,
   NotificationData,
   NotificationLog,
   NotificationLogs,
-} from 'src/common/interface';
-import { NotificationService } from 'src/notification/notification.service';
-import { rsi, wema } from 'technicalindicators';
-import { MarketTrend } from '../common/enum';
+} from '../common/interface';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class TradingService implements OnModuleInit {
@@ -100,7 +100,11 @@ export class TradingService implements OnModuleInit {
     const rsiResultList = rsi({ values: prices, period: 14 });
     const lastRSI = _.last(rsiResultList);
 
-    const trend = this.getMarketTrend(maResultList, rsiResultList);
+    const trend = this.getMarketTrend(
+      maResultList,
+      rsiResultList,
+      _.last(prices),
+    );
     const notificationData: NotificationData = {
       symbol: candleOptions.symbol,
       interval: candleOptions.interval,
@@ -131,7 +135,7 @@ export class TradingService implements OnModuleInit {
     };
 
     try {
-      if (this.shouldNotify(lastNotification, data)) {
+      if (this.shouldNotify(data, lastNotification)) {
         await notify();
       } else {
         this.logger.verbose(
@@ -145,13 +149,13 @@ export class TradingService implements OnModuleInit {
   }
 
   private shouldNotify(
-    notificationLog: NotificationLog,
     data: NotificationData,
+    notificationLog: NotificationLog,
   ) {
     return (
       !notificationLog ||
-      (notificationLog.trend !== data.trend &&
-        notificationLog.trend !== data.maTrend)
+      (data.trend !== notificationLog.trend &&
+        data.trend !== notificationLog.maTrend)
     );
   }
 
@@ -167,7 +171,11 @@ export class TradingService implements OnModuleInit {
     );
   }
 
-  private getMarketTrend(maResultList: number[][], rsiList: number[]) {
+  private getMarketTrend(
+    maResultList: number[][],
+    rsiList: number[],
+    lastPrice: number,
+  ) {
     const lastValues = maResultList.map((item) => _.last(item));
     const lastRSIValue = _.last(rsiList);
 
@@ -191,9 +199,15 @@ export class TradingService implements OnModuleInit {
     const rsiTrend = getRSITrend();
     let trend = MarketTrend.Sideway;
     const trends = [maTrend, rsiTrend];
-    if (_.isEqual(_.uniq(trends), [MarketTrend.Bearish]))
+    if (
+      _.isEqual(_.uniq(trends), [MarketTrend.Bearish]) &&
+      lastPrice < lastValues[0]
+    )
       trend = MarketTrend.Bearish;
-    if (_.isEqual(_.uniq(trends), [MarketTrend.Bullish]))
+    if (
+      _.isEqual(_.uniq(trends), [MarketTrend.Bullish]) &&
+      lastPrice > lastValues[0]
+    )
       trend = MarketTrend.Bullish;
     return { trend, maTrend, rsiTrend };
   }

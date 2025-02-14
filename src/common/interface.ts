@@ -1,4 +1,4 @@
-import { MarketTrend } from '../common/enum';
+import { MarketTrend } from './enums';
 import { Interval } from './types';
 
 export interface AppConfig {
