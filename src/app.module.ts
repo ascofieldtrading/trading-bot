@@ -11,6 +11,8 @@ import { AppConfig, DatabaseConfig } from './common/interface';
 import { UserModule } from './user/user.module';
 import { UserEntity } from './user/entity/user.entity';
 import { UserConfigEntity } from './user/entity/userconfig.entity';
+import { SignalLogModule } from './signallog/signallog.module';
+import { SignalLogEntity } from './signallog/entity/signalog.entity';
 
 @Module({
   imports: [
@@ -31,7 +33,7 @@ import { UserConfigEntity } from './user/entity/userconfig.entity';
           username: database.username,
           password: database.password,
           database: database.name,
-          entities: [UserEntity, UserConfigEntity],
+          entities: [UserEntity, UserConfigEntity, SignalLogEntity],
           synchronize: true,
           ssl: { rejectUnauthorized: false },
         };
@@ -41,6 +43,7 @@ import { UserConfigEntity } from './user/entity/userconfig.entity';
     NotificationModule,
     BotModule,
     UserModule,
+    SignalLogModule,
   ],
   controllers: [AppController],
   providers: [AppService],

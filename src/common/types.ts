@@ -1,3 +1,5 @@
+export type CoinSymbol = 'SOLUSDT' | 'BTCUSDT' | 'AAVEUSDT';
+
 export type Interval =
   | '1m'
   | '3m'

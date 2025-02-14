@@ -1,5 +1,5 @@
 import { MarketTrend } from './enums';
-import { Interval } from './types';
+import { CoinSymbol, Interval } from './types';
 export interface DatabaseConfig {
   host: string;
   port: number;
@@ -37,8 +37,8 @@ export type NotificationLogs = {
   };
 };
 
-export interface NotificationData extends Trend {
-  symbol: string;
+export interface MAStrategyResult extends Trend {
+  symbol: CoinSymbol;
   interval: Interval;
   lastRSI: number;
   lastMA: number[];

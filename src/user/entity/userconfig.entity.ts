@@ -17,21 +17,18 @@ export class UserConfigEntity {
   @OneToOne(() => UserEntity, (user) => user.userConfig, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn() // Ensures a foreign key to User
+  @JoinColumn()
   user: UserEntity;
 
-  @Column({ type: 'text' }) // Can store comma-separated symbols like "BTCUSDT,ETHUSDT"
+  @Column()
   symbols: string;
 
-  @Column({ type: 'text' }) // Can store comma-separated intervals like "1m,5m,15m"
+  @Column()
   intervals: string;
 
-  @Column({ type: 'int' })
-  checkInSeconds: number;
-
-  @CreateDateColumn({ type: 'timestamptz' })
+  @CreateDateColumn()
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz' })
+  @UpdateDateColumn()
   updatedAt: Date;
 }

@@ -1,21 +1,8 @@
-import { Interval } from './types';
+import { CoinSymbol, Interval } from './types';
 
-export const intervals: Interval[] = [
-  '1m',
-  '3m',
-  '5m',
-  '15m',
-  '30m',
-  '1h',
-  '2h',
-  '4h',
-  '6h',
-  '8h',
-  '12h',
-  '1d',
-  '3d',
-  '1w',
-  '1M',
-];
+export const INTERVALS: Interval[] = ['5m', '15m', '1h', '4h'];
 
-export const NOTIFICATION_LOG_FILE_PATH = './customlogs/notificationlog.json';
+export const COIN_SYMBOLS: CoinSymbol[] = ['AAVEUSDT', 'SOLUSDT', 'BTCUSDT'];
+
+export const NEW_USER_DEFAULT_INTERVALS: Interval[] = ['15m'];
+export const NEW_USER_DEFAULT_SYMBOLS: CoinSymbol[] = ['BTCUSDT'];

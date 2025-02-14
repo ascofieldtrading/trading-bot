@@ -2,11 +2,13 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { UserConfigEntity } from './userconfig.entity';
+import { SignalLogEntity } from '../../signallog/entity/signalog.entity';
 
 @Entity({ name: 'user' })
 export class UserEntity {
@@ -30,6 +32,10 @@ export class UserEntity {
 
   @OneToOne(() => UserConfigEntity, (userConfig) => userConfig.user, {
     cascade: true,
+    eager: true,
   })
   userConfig: UserConfigEntity;
+
+  @OneToMany(() => SignalLogEntity, (signal) => signal.user)
+  signalLogs: SignalLogEntity[];
 }

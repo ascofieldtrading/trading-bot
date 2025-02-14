@@ -3,28 +3,28 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import Binance, { CandlesOptions } from 'binance-api-node';
 import { CronJob } from 'cron';
-import fs from 'fs';
-import * as _ from 'lodash';
-import { rsi, wema } from 'technicalindicators';
-import { NOTIFICATION_LOG_FILE_PATH } from '../common/constant';
-import { MarketTrend } from '../common/enums';
-import {
-  AppConfig,
-  NotificationData,
-  NotificationLog,
-  NotificationLogs,
-  Trend,
-} from '../common/interface';
-import { NotificationService } from '../notification/notification.service';
+import _ from 'lodash';
+import { Message } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
+import {
+  COIN_SYMBOLS,
+  INTERVALS,
+  NEW_USER_DEFAULT_INTERVALS,
+  NEW_USER_DEFAULT_SYMBOLS,
+} from '../common/constant';
+import { AppConfig, MAStrategyResult } from '../common/interface';
+import { CoinSymbol, Interval } from '../common/types';
+import { NotificationService } from '../notification/notification.service';
+import { TheMovingAverageStrategy } from '../strategy/themovingaverage.strategy';
+import { UserEntity } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
+
+process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 
 @Injectable()
 export class TradingService implements OnModuleInit {
   private readonly logger = new Logger(TradingService.name);
   private client: import('binance-api-node').Binance;
-
-  private notificationLogs: NotificationLogs = {} as NotificationLogs;
 
   constructor(
     private configService: ConfigService<AppConfig>,
@@ -44,202 +44,172 @@ export class TradingService implements OnModuleInit {
       onStart: async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.enableUserNotification(user);
-        await this.botService.sendMessage(
-          user.telegramChatId,
-          'Notification is enabled!',
-        );
+        await this.notificationService.sendMessageToUser(user, [
+          'Started to receive the coin signals',
+        ]);
+        await this.notificationService.sendUserConfigs(user);
       },
       onStop: async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.disableUserNotification(user);
-        await this.botService.sendMessage(
-          user.telegramChatId,
-          'Notification is disabled!',
-        );
+        await this.notificationService.sendMessageToUser(user, [
+          'Stopped to receive the coin signals',
+        ]);
+      },
+      onStatus: async (msg) => {
+        const user = await this.userService.createUserIfNotExists(msg);
+        await this.checkAndNotifySymbolStatusForUser(user);
+      },
+      onUpdateIntervals: async (msg) => {
+        const user = await this.userService.createUserIfNotExists(msg);
+        await this.updateUserFieldConfig({
+          name: 'intervals',
+          msg,
+          user,
+          allOptions: INTERVALS,
+          onUpdate: async (options) => {
+            user.userConfig.intervals = options.join(',');
+            await this.userService.update(user);
+          },
+        });
+      },
+      onUpdateSymbols: async (msg) => {
+        const user = await this.userService.createUserIfNotExists(msg);
+        await this.updateUserFieldConfig({
+          name: 'symbols',
+          msg,
+          user,
+          allOptions: COIN_SYMBOLS,
+          onUpdate: async (options) => {
+            user.userConfig.symbols = options.join(',');
+            await this.userService.update(user);
+          },
+        });
+      },
+      onResetConfig: async (msg) => {
+        const user = await this.userService.createUserIfNotExists(msg);
+        user.userConfig.symbols = NEW_USER_DEFAULT_SYMBOLS.join(',');
+        user.userConfig.intervals = NEW_USER_DEFAULT_INTERVALS.join(',');
+        await this.userService.update(user);
+        await this.notificationService.sendMessageToUser(user, [
+          'Config reset!',
+        ]);
+        await this.notificationService.sendUserConfigs(user);
       },
     });
-    this.notificationService.simpleNotify([
-      'Trading Bot started successfully!',
-    ]);
-    this.configService.get('notificationOnStart') &&
-      (await this.notifyInitialStatus());
 
-    const initScheduleJob = () => {
+    const initCheckSignalJob = () => {
       this.logger.verbose(
         `Init schedule check and notify - using cron schedule: ${this.configService.get('scheduledCronValue')}`,
       );
 
       const job = new CronJob(
         this.configService.get('scheduledCronValue'),
-        this.checkAndNotifyStatus.bind(this),
+        this.checkAndNotifySymbolStatus.bind(this),
       );
 
       this.schedulerRegistry.addCronJob('dynamicJob', job);
       job.start();
     };
-    initScheduleJob();
+    initCheckSignalJob();
   }
 
-  async notifyInitialStatus() {
-    this.logger.verbose('Notify initial status');
+  async checkAndNotifySymbolStatusForUser(user: UserEntity) {
     this.logger.verbose(
       `All intervals: ${this.configService.get('intervals')}`,
     );
-    for (const symbol of this.configService.get('symbols')) {
-      for (const interval of this.configService.get('intervals')) {
-        await this.theMovingAverageStrategy({
+    for (const symbol of user.userConfig.symbols.split(',')) {
+      for (const interval of user.userConfig.intervals.split(',')) {
+        const result = await this.getMAStrategyResult({
           symbol,
-          interval,
+          interval: interval as Interval,
         });
+        await this.notificationService.notifyUser(user, result);
       }
     }
   }
 
-  private async checkAndNotifyStatus() {
+  private async checkAndNotifySymbolStatus() {
     this.logger.verbose(
       `All intervals: ${this.configService.get('intervals')}`,
     );
     this.configService.get('symbols').forEach((symbol) => {
-      this.configService.get('intervals').forEach((interval) => {
-        this.theMovingAverageStrategy({
+      this.configService.get('intervals').forEach(async (interval) => {
+        const result = await this.getMAStrategyResult({
           symbol,
           interval,
         });
+        await this.notificationService.notifyStatusToUsers(result);
       });
     });
   }
 
-  private async theMovingAverageStrategy(candleOptions: CandlesOptions) {
+  private async getMAStrategyResult(candleOptions: CandlesOptions) {
     const candles = await this.getCandles({
       ...candleOptions,
       limit: this.configService.get('fetchPriceLimit'),
     });
-    const prices = candles.map((item) => Number(item.close));
-    const periods = [21, 50, 200];
-    const maResultList = periods.map((period) =>
-      wema({ values: prices, period: period }),
-    );
-    const lastMA = maResultList.map((item) => _.last(item));
-    const rsiResultList = rsi({ values: prices, period: 14 });
-    const lastRSI = _.last(rsiResultList);
+    const maStrategy = new TheMovingAverageStrategy({
+      candles,
+      periods: [21, 50, 200],
+    });
+    const { trend, lastMA, lastRSI } = maStrategy.calculate();
 
-    const lastOpenPrice = Number(_.last(candles).open);
-    const trend = this.getMarketTrend(
-      maResultList,
-      rsiResultList,
-      lastOpenPrice,
-    );
-    const notificationData: NotificationData = {
-      symbol: candleOptions.symbol,
+    const result: MAStrategyResult = {
+      symbol: candleOptions.symbol as CoinSymbol,
       interval: candleOptions.interval,
       lastRSI,
       lastMA: lastMA,
       ...trend,
     };
-    await this.handleNotification(notificationData);
-  }
-
-  private async handleNotification(data: NotificationData) {
-    const lastNotification =
-      this.notificationLogs[data.interval]?.[data.symbol];
-    const notify = async () => {
-      const maValues = data.lastMA.reduce(
-        (prev, current, i) => ({ ...prev, [`MA${i + 1}`]: current.toFixed(4) }),
-        {},
-      );
-      const messageObj = {
-        Symbol: [data.symbol],
-        Interval: data.interval,
-        Trend: data.trend,
-        ...maValues,
-        RSI: data.lastRSI,
-      };
-      await this.notificationService.simpleNotify(messageObj);
-      this.logger.verbose(
-        `Notified with message: ${JSON.stringify(messageObj, null, 2)}`,
-      );
-    };
-
-    try {
-      if (this.shouldNotify(data, lastNotification)) {
-        await notify();
-      } else {
-        this.logger.verbose(
-          `Skip notication: ${data.symbol} - ${data.interval}. Market trend: ${data.trend}`,
-        );
-      }
-      this.updateAndSaveNotificationLog(data);
-    } catch (e) {
-      this.logger.error(`Failed to notify and save logs: ${data.interval}`);
-    }
-  }
-
-  private shouldNotify(
-    data: NotificationData,
-    notificationLog: NotificationLog,
-  ) {
-    return (
-      !notificationLog ||
-      (data.trend !== notificationLog.trend &&
-        (data.trend === MarketTrend.Sideway ||
-          data.trend !== notificationLog.maTrend))
-    );
-  }
-
-  private updateAndSaveNotificationLog(data: NotificationData) {
-    _.set(this.notificationLogs, `${data.interval}.${data.symbol}`, {
-      notifiedAt: new Date().toISOString(),
-      ...data,
-    });
-    fs.writeFileSync(
-      NOTIFICATION_LOG_FILE_PATH,
-      JSON.stringify(this.notificationLogs, null, 2),
-      'utf-8',
-    );
-  }
-
-  private getMarketTrend(
-    maResultList: number[][],
-    rsiList: number[],
-    lastOpenPrice: number,
-  ): Trend {
-    const lastValues = maResultList.map((item) => _.last(item));
-    const lastRSIValue = _.last(rsiList);
-
-    const getMaTrend = () => {
-      const maTrendValue = lastValues.reduce((prev, current, i) => {
-        if (!i) return 0;
-        if (current == lastValues[i - 1]) return prev;
-        return prev + (current < lastValues[i - 1] ? 1 : -1);
-      }, 0);
-
-      if (Math.abs(maTrendValue) !== lastValues.length - 1)
-        return MarketTrend.Sideway;
-      return maTrendValue > 0 ? MarketTrend.Bullish : MarketTrend.Bearish;
-    };
-    const getRSITrend = () => {
-      if (lastRSIValue == 50) return MarketTrend.Sideway;
-      return lastRSIValue > 50 ? MarketTrend.Bullish : MarketTrend.Bearish;
-    };
-
-    const maTrend = getMaTrend();
-    const rsiTrend = getRSITrend();
-    let trend = MarketTrend.Sideway;
-    const trends = [maTrend, rsiTrend];
-    if (
-      _.isEqual(_.uniq(trends), [MarketTrend.Bearish]) &&
-      lastOpenPrice < lastValues[0]
-    )
-      trend = MarketTrend.Bearish;
-    if (
-      _.isEqual(_.uniq(trends), [MarketTrend.Bullish]) &&
-      lastOpenPrice > lastValues[0]
-    )
-      trend = MarketTrend.Bullish;
-    return { trend, maTrend, rsiTrend };
+    return result;
   }
 
   private getCandles(candleOptions: CandlesOptions) {
     return this.client.candles(candleOptions);
+  }
+
+  private async updateUserFieldConfig(params: {
+    user: UserEntity;
+    name: string;
+    msg: Message;
+    allOptions: string[];
+    onUpdate: (options: string[]) => Promise<void>;
+  }) {
+    const prompt = await this.notificationService.sendMessageToUser(
+      params.user,
+      [
+        `Enter your new ${params.name}`,
+        '',
+        `Supported ${params.name}:`,
+        ...params.allOptions.map((val) => `- ${val}`),
+      ],
+      {
+        reply_markup: {
+          force_reply: true,
+        },
+      },
+    );
+    this.botService.bot.onReplyToMessage(
+      params.msg.chat.id,
+      prompt.message_id,
+      async (msg) => {
+        const newOptionsText = msg.text;
+        const newOptions = newOptionsText.split(/,|\n|\s/) as Interval[];
+        const isValid =
+          _.difference(newOptions, params.allOptions).length === 0;
+        if (isValid) {
+          await params.onUpdate(newOptions);
+          await this.notificationService.sendMessageToUser(params.user, [
+            `${_.upperFirst(params.name)} updated!`,
+          ]);
+          await this.notificationService.sendUserConfigs(params.user);
+          return;
+        }
+        await this.notificationService.sendMessageToUser(params.user, [
+          `${_.upperFirst(params.name)} invalid`,
+        ]);
+      },
+    );
   }
 }
