@@ -13,8 +13,11 @@ import {
   NotificationData,
   NotificationLog,
   NotificationLogs,
+  Trend,
 } from '../common/interface';
 import { NotificationService } from '../notification/notification.service';
+
+process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 
 @Injectable()
 export class TradingService implements OnModuleInit {
@@ -91,7 +94,7 @@ export class TradingService implements OnModuleInit {
       ...candleOptions,
       limit: this.configService.get('fetchPriceLimit'),
     });
-    const prices = candles.map((item) => Number(item.open));
+    const prices = candles.map((item) => Number(item.close));
     const periods = [21, 50, 200];
     const maResultList = periods.map((period) =>
       wema({ values: prices, period: period }),
@@ -100,10 +103,11 @@ export class TradingService implements OnModuleInit {
     const rsiResultList = rsi({ values: prices, period: 14 });
     const lastRSI = _.last(rsiResultList);
 
+    const lastOpenPrice = Number(_.last(candles).open);
     const trend = this.getMarketTrend(
       maResultList,
       rsiResultList,
-      _.last(prices),
+      lastOpenPrice,
     );
     const notificationData: NotificationData = {
       symbol: candleOptions.symbol,
@@ -174,8 +178,8 @@ export class TradingService implements OnModuleInit {
   private getMarketTrend(
     maResultList: number[][],
     rsiList: number[],
-    lastPrice: number,
-  ) {
+    lastOpenPrice: number,
+  ): Trend {
     const lastValues = maResultList.map((item) => _.last(item));
     const lastRSIValue = _.last(rsiList);
 
@@ -201,12 +205,12 @@ export class TradingService implements OnModuleInit {
     const trends = [maTrend, rsiTrend];
     if (
       _.isEqual(_.uniq(trends), [MarketTrend.Bearish]) &&
-      lastPrice < lastValues[0]
+      lastOpenPrice < lastValues[0]
     )
       trend = MarketTrend.Bearish;
     if (
       _.isEqual(_.uniq(trends), [MarketTrend.Bullish]) &&
-      lastPrice > lastValues[0]
+      lastOpenPrice > lastValues[0]
     )
       trend = MarketTrend.Bullish;
     return { trend, maTrend, rsiTrend };
