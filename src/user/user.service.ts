@@ -47,7 +47,7 @@ export class UserService {
 
   async createUserIfNotExists(message: Message) {
     const user = await this.userRepository.findOneBy({
-      telegramUserId: message.from.id,
+      telegramUserId: message.from!.id,
     });
 
     if (user) return user;
@@ -58,7 +58,7 @@ export class UserService {
 
     const newUser = new UserEntity();
     newUser.userConfig = userConfig;
-    newUser.telegramUserId = message.from.id;
+    newUser.telegramUserId = message.from!.id;
     newUser.telegramChatId = message.chat.id;
     return this.userRepository.save(newUser);
   }

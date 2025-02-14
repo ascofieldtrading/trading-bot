@@ -15,7 +15,7 @@ export class BotService {
   bot: TelegramBot;
 
   constructor(private configService: ConfigService<AppConfig>) {
-    this.bot = new TelegramBot(configService.get('telegramBotToken'), {
+    this.bot = new TelegramBot(configService.get('telegramBotToken')!, {
       polling: true,
       request: {
         agentOptions: {
@@ -83,7 +83,11 @@ export class BotService {
     return this.bot.sendMessage(chatId, message, options);
   }
 
-  simpleNotify(chatId: number, data: string[], options?: SendMessageOptions) {
+  sendMultilineMessage(
+    chatId: number,
+    data: string[],
+    options?: SendMessageOptions,
+  ) {
     if (!this.configService.get('notificationEnabled')) {
       this.logger.verbose('Notification is disabled. Skip sending message');
       return;

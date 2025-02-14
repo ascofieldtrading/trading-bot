@@ -19,8 +19,6 @@ import { TheMovingAverageStrategy } from '../strategy/themovingaverage.strategy'
 import { UserEntity } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
 
-process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
-
 @Injectable()
 export class TradingService implements OnModuleInit {
   private readonly logger = new Logger(TradingService.name);
@@ -40,27 +38,33 @@ export class TradingService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    const command =
+      (cb: (msg: Message) => Promise<void>) => async (message: Message) =>
+        cb(message).catch(async (e) => {
+          this.logger.error(`Failed to resolve user command. Error ${e}`);
+          this.notificationService.sendErrorMessage(message.chat.id);
+        });
     this.botService.listenCommands({
-      onStart: async (msg) => {
+      onStart: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.enableUserNotification(user);
         await this.notificationService.sendMessageToUser(user, [
           'Started to receive the coin signals',
         ]);
         await this.notificationService.sendUserConfigs(user);
-      },
-      onStop: async (msg) => {
+      }),
+      onStop: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.disableUserNotification(user);
         await this.notificationService.sendMessageToUser(user, [
           'Stopped to receive the coin signals',
         ]);
-      },
-      onStatus: async (msg) => {
+      }),
+      onStatus: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.checkAndNotifySymbolStatusForUser(user);
-      },
-      onUpdateIntervals: async (msg) => {
+      }),
+      onUpdateIntervals: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.updateUserFieldConfig({
           name: 'intervals',
@@ -72,8 +76,8 @@ export class TradingService implements OnModuleInit {
             await this.userService.update(user);
           },
         });
-      },
-      onUpdateSymbols: async (msg) => {
+      }),
+      onUpdateSymbols: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.updateUserFieldConfig({
           name: 'symbols',
@@ -85,8 +89,8 @@ export class TradingService implements OnModuleInit {
             await this.userService.update(user);
           },
         });
-      },
-      onResetConfig: async (msg) => {
+      }),
+      onResetConfig: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         user.userConfig.symbols = NEW_USER_DEFAULT_SYMBOLS.join(',');
         user.userConfig.intervals = NEW_USER_DEFAULT_INTERVALS.join(',');
@@ -95,7 +99,7 @@ export class TradingService implements OnModuleInit {
           'Config reset!',
         ]);
         await this.notificationService.sendUserConfigs(user);
-      },
+      }),
     });
 
     const initCheckSignalJob = () => {
@@ -104,7 +108,7 @@ export class TradingService implements OnModuleInit {
       );
 
       const job = new CronJob(
-        this.configService.get('scheduledCronValue'),
+        this.configService.get('scheduledCronValue')!,
         this.checkAndNotifySymbolStatus.bind(this),
       );
 
@@ -124,7 +128,7 @@ export class TradingService implements OnModuleInit {
           symbol,
           interval: interval as Interval,
         });
-        await this.notificationService.notifyUser(user, result);
+        await this.notificationService.sendSignalStatusToUser(user, result);
       }
     }
   }
@@ -133,13 +137,20 @@ export class TradingService implements OnModuleInit {
     this.logger.verbose(
       `All intervals: ${this.configService.get('intervals')}`,
     );
-    this.configService.get('symbols').forEach((symbol) => {
-      this.configService.get('intervals').forEach(async (interval) => {
-        const result = await this.getMAStrategyResult({
-          symbol,
-          interval,
-        });
-        await this.notificationService.notifyStatusToUsers(result);
+    COIN_SYMBOLS.forEach((symbol) => {
+      INTERVALS.forEach(async (interval) => {
+        try {
+          const result = await this.getMAStrategyResult({
+            symbol,
+            interval,
+          });
+          await this.notificationService.sendSignalStautsToUsers(result);
+        } catch (e) {
+          this.logger.error(
+            `${symbol} ${interval}`,
+            `Failed to check and notify sumbol status. Error ${e}`,
+          );
+        }
       });
     });
   }
@@ -153,13 +164,14 @@ export class TradingService implements OnModuleInit {
       candles,
       periods: [21, 50, 200],
     });
-    const { trend, lastMA, lastRSI } = maStrategy.calculate();
+    const { trend, lastOpenPrice, lastMA, lastRSI } = maStrategy.calculate();
 
     const result: MAStrategyResult = {
       symbol: candleOptions.symbol as CoinSymbol,
       interval: candleOptions.interval,
-      lastRSI,
+      lastOpenPrice,
       lastMA: lastMA,
+      lastRSI,
       ...trend,
     };
     return result;
@@ -190,10 +202,12 @@ export class TradingService implements OnModuleInit {
         },
       },
     );
+    if (!prompt?.message_id) return;
     this.botService.bot.onReplyToMessage(
       params.msg.chat.id,
       prompt.message_id,
       async (msg) => {
+        if (!msg.text) return;
         const newOptionsText = msg.text;
         const newOptions = newOptionsText.split(/,|\n|\s/) as Interval[];
         const isValid =

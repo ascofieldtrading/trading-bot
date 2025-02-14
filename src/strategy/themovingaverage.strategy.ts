@@ -1,41 +1,50 @@
 import { CandleChartResult } from 'binance-api-node';
 import _ from 'lodash';
-import { wema, rsi } from 'technicalindicators';
+import { rsi, wema } from 'technicalindicators';
 import { MarketTrend } from '../common/enums';
 import { Trend } from '../common/interface';
+
+export interface MAStrategyResult {
+  trend: Trend;
+  lastOpenPrice: number;
+  lastMA: number[];
+  lastRSI: number;
+}
 
 export class TheMovingAverageStrategy {
   private candles: CandleChartResult[];
   private periods: number[];
 
-  constructor({
-    candles,
-    periods,
-  }: {
-    candles: CandleChartResult[];
-    periods: number[];
-  }) {
+  constructor(
+    {
+      candles,
+      periods,
+    }: {
+      candles: CandleChartResult[];
+      periods: number[];
+    } = { candles: [], periods: [] },
+  ) {
     this.candles = candles;
     this.periods = periods;
   }
 
-  calculate() {
+  calculate(): MAStrategyResult {
     const prices = this.candles.map((item) => Number(item.close));
     const maResultList = this.periods.map((period) =>
       wema({ values: prices, period: period }),
     );
-    const lastMA = maResultList.map((item) => _.last(item));
+    const lastMA = maResultList.map((item) => _.last(item)!);
     const rsiResultList = rsi({ values: prices, period: 14 });
-    const lastRSI = _.last(rsiResultList);
+    const lastRSI = _.last(rsiResultList)!;
 
-    const lastOpenPrice = Number(_.last(this.candles).open);
+    const lastOpenPrice = Number(_.last(this.candles)!.open);
     const trend = this.getMarketTrend(
       maResultList,
       rsiResultList,
       lastOpenPrice,
     );
 
-    return { trend, lastMA, lastRSI };
+    return { trend, lastOpenPrice, lastMA, lastRSI };
   }
 
   private getMarketTrend(
@@ -43,8 +52,8 @@ export class TheMovingAverageStrategy {
     rsiList: number[],
     lastOpenPrice: number,
   ): Trend {
-    const lastMAValues = maResultList.map((item) => _.last(item));
-    const lastRSIValue = _.last(rsiList);
+    const lastMAValues = maResultList.map((item) => _.last(item)!);
+    const lastRSIValue = _.last(rsiList)!;
 
     const getMaTrend = () => {
       const maTrendValue = lastMAValues.reduce((prev, current, i) => {

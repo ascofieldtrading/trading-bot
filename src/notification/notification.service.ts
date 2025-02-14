@@ -3,7 +3,6 @@ import { SendMessageOptions } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
 import { MarketTrend } from '../common/enums';
 import { MAStrategyResult } from '../common/interface';
-import { SignalLogEntity } from '../signallog/entity/signalog.entity';
 import { SignalLogService } from '../signallog/signallog.service';
 import { UserEntity } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
@@ -18,64 +17,54 @@ export class NotificationService {
     private signalLogService: SignalLogService,
   ) {}
 
-  async notifyStatusToUsers(data: MAStrategyResult) {
+  async sendSignalStautsToUsers(data: MAStrategyResult) {
     const users = await this.userSerice.getUsersBySymbolAndInterval(
       [data.symbol],
       [data.interval],
     );
-
-    try {
-      users.forEach(async (user) => {
-        const lastSignalLog = await this.signalLogService.getLatestUserLog(
-          user.telegramUserId,
-          { notified: true },
-        );
-        const shouldNotify = this.shouldNotify(data, lastSignalLog);
-        const userText = `user (telegramUserId=${user.telegramUserId})`;
-        if (shouldNotify) {
-          await this.notifyUser(user, data);
-          this.logger.verbose([
-            `Notified ${userText}`,
-            `${data.symbol} - ${data.interval} - ${data.trend}`,
-          ]);
-          return;
-        }
+    users.forEach(async (user) => {
+      const lastSignalLog = await this.signalLogService.getLatestUserLog(
+        user.telegramUserId,
+        {
+          interval: data.interval,
+          symbol: data.symbol,
+          notified: true,
+        },
+      );
+      const shouldNotify = this.shouldNotify(data, lastSignalLog?.data);
+      const userText = `user (telegramUserId=${user.telegramUserId})`;
+      if (shouldNotify) {
+        await this.sendSignalStatusToUser(user, data);
         this.logger.verbose([
-          `Skip notify ${userText}`,
+          `Notified ${userText}`,
           `${data.symbol} - ${data.interval} - ${data.trend}`,
         ]);
-      });
-    } catch (e) {
-      this.logger.error(
-        `Failed to notify and save logs: ${data.interval}. Error: ${e}`,
-      );
-    }
+        return;
+      }
+      this.logger.verbose([
+        `Skip notify ${userText}`,
+        `${data.symbol} - ${data.interval} - ${data.trend}`,
+      ]);
+    });
   }
 
-  public async notifyUser(user: UserEntity, data: MAStrategyResult) {
+  public async sendSignalStatusToUser(
+    user: UserEntity,
+    data: MAStrategyResult,
+  ) {
     const content = this.getMAMessageContent(data);
-    await this.sendMessageToUser(user, content);
-    await this.signalLogService.saveLog(user, data, true);
-  }
-
-  private getMAMessageContent(data: MAStrategyResult): string[] {
-    const maValues = data.lastMA.reduce(
-      (prev, current, i) => [...prev, `MA${i + 1}: ${current.toFixed(4)}`],
-      [],
-    );
-    return [
-      `Symbol: ${data.symbol}`,
-      `Interval: ${data.interval}`,
-      `Trend: ${data.trend}`,
-      ...maValues,
-      `RSI: ${data.lastRSI}`,
-    ];
+    await this.sendMessageToUser(user, content, { parse_mode: 'HTML' });
+    await this.signalLogService.saveMAStrategyResultLog({
+      user,
+      logData: data,
+      isNotified: true,
+    });
   }
 
   async sendMessageToAllUsers(data: string[]) {
     const users = await this.userSerice.getUsers();
     const pros = users.map((u) =>
-      this.botService.simpleNotify(u.telegramChatId, data),
+      this.botService.sendMultilineMessage(u.telegramChatId, data),
     );
     return Promise.all(pros);
   }
@@ -85,7 +74,11 @@ export class NotificationService {
     data: string[],
     options?: SendMessageOptions,
   ) {
-    return this.botService.simpleNotify(user.telegramChatId, data, options);
+    return this.botService.sendMultilineMessage(
+      user.telegramChatId,
+      data,
+      options,
+    );
   }
 
   sendUserConfigs(user: UserEntity) {
@@ -96,12 +89,35 @@ export class NotificationService {
     ]);
   }
 
-  private shouldNotify(data: MAStrategyResult, signalLog: SignalLogEntity) {
-    return (
-      !signalLog ||
-      (data.trend !== signalLog.data.trend &&
-        (data.trend === MarketTrend.Sideway ||
-          data.maTrend !== signalLog.data.maTrend))
+  private getMAMessageContent(data: MAStrategyResult): string[] {
+    const maValues = data.lastMA.reduce(
+      (prev, current, i) => [...prev, `MA${i + 1}: ${current.toFixed(4)}`],
+      [],
     );
+    const trendIcon = {
+      [MarketTrend.Bullish]: (msg) => `🟢 ${msg} 🟢`,
+      [MarketTrend.Bearish]: (msg) => `🔴 ${msg} 🔴`,
+      [MarketTrend.Sideway]: (msg) => msg,
+    };
+    return [
+      trendIcon[data.trend](`${data.symbol} ${data.interval} ${data.trend}`),
+      '',
+      ...maValues,
+      `RSI: ${data.lastRSI}`,
+      '',
+      `Last Price: ${data.lastOpenPrice}`,
+    ];
+  }
+
+  private shouldNotify(result: MAStrategyResult, old?: MAStrategyResult) {
+    if (!old) return true;
+    if (result.trend === old.trend) return false;
+    if (result.maTrend === old.maTrend) return false;
+
+    return true;
+  }
+
+  public sendErrorMessage(chatId: number) {
+    return this.botService.sendMessage(chatId, 'Something went wrong!');
   }
 }

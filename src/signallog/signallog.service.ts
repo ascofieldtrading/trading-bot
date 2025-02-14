@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
-import { AppConfig, MAStrategyResult } from '../common/interface';
+import { AppConfig } from '../common/interface';
 import { UserEntity } from '../user/entity/user.entity';
-import { SignalLogEntity } from './entity/signalog.entity';
+import { SignalLogData, SignalLogEntity } from './entity/signalog.entity';
 
 @Injectable()
 export class SignalLogService {
@@ -14,24 +14,24 @@ export class SignalLogService {
     private configService: ConfigService<AppConfig>,
   ) {}
 
-  saveLog(user: UserEntity, logData: MAStrategyResult, isNotified: boolean) {
+  saveMAStrategyResultLog(params: {
+    user: UserEntity;
+    logData: SignalLogData;
+    isNotified: boolean;
+  }) {
     const log = new SignalLogEntity();
-    log.user = user;
-    log.interval = logData.interval;
-    log.symbol = logData.symbol;
-    log.notified = isNotified;
-    log.data = {
-      trend: logData.trend,
-      maTrend: logData.maTrend,
-      rsiTrend: logData.rsiTrend,
-    };
+    log.user = params.user;
+    log.interval = params.logData.interval;
+    log.symbol = params.logData.symbol;
+    log.notified = params.isNotified;
+    log.data = params.logData;
     return this.signalLogRepository.save(log);
   }
 
   getLatestUserLog(
     telegramUserId: number,
     where: FindOptionsWhere<SignalLogEntity>,
-  ) {
+  ): Promise<SignalLogEntity | null> {
     return this.signalLogRepository.findOne({
       where: {
         user: {

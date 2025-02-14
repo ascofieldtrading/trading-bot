@@ -6,15 +6,11 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { MAStrategyResult } from '../../common/interface';
 import { CoinSymbol, Interval } from '../../common/types';
 import { UserEntity } from '../../user/entity/user.entity';
-import { MarketTrend } from '../../common/enums';
 
-export interface SignalLogData {
-  trend: MarketTrend;
-  maTrend: MarketTrend;
-  rsiTrend: MarketTrend;
-}
+export interface SignalLogData extends MAStrategyResult {}
 
 @Entity({ name: 'signal_log' })
 export class SignalLogEntity {

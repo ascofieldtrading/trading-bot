@@ -28,18 +28,10 @@ export interface Trend {
   rsiTrend: MarketTrend;
 }
 
-export type NotificationLog = {
-  notifiedAt: string;
-} & Trend;
-export type NotificationLogs = {
-  [key in Interval]: {
-    [key in string]: NotificationLog;
-  };
-};
-
 export interface MAStrategyResult extends Trend {
   symbol: CoinSymbol;
   interval: Interval;
+  lastOpenPrice: number;
   lastRSI: number;
   lastMA: number[];
 }
