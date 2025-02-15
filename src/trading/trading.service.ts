@@ -41,6 +41,14 @@ export class TradingService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    await this.checkAndSaveLastSidewayLogs();
+    this.initBotCommand();
+    this.initCheckSignalScheduleJob(
+      this.configService.get('scheduledCronValue')!,
+    );
+  }
+
+  private initBotCommand() {
     const command =
       (cb: (msg: Message) => Promise<void>) => async (message: Message) =>
         cb(message).catch(async (e) => {
@@ -51,7 +59,7 @@ export class TradingService implements OnModuleInit {
       onStart: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.enableUserNotification(user);
-        await this.notificationService.sendMessageToUser(user, [
+        await this.botService.sendMultilineMessage(user.telegramChatId, [
           'Started to receive the coin signals',
         ]);
         await this.botService.sendUserConfigs(user);
@@ -59,7 +67,7 @@ export class TradingService implements OnModuleInit {
       onStop: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.disableUserNotification(user);
-        await this.notificationService.sendMessageToUser(user, [
+        await this.botService.sendMultilineMessage(user.telegramChatId, [
           'Stopped to receive the coin signals',
         ]);
       }),
@@ -98,17 +106,12 @@ export class TradingService implements OnModuleInit {
         user.userConfig.symbols = NEW_USER_DEFAULT_SYMBOLS.join(',');
         user.userConfig.intervals = NEW_USER_DEFAULT_INTERVALS.join(',');
         await this.userService.update(user);
-        await this.notificationService.sendMessageToUser(user, [
+        await this.botService.sendMultilineMessage(user.telegramChatId, [
           'Config reset!',
         ]);
         await this.botService.sendUserConfigs(user);
       }),
     });
-
-    await this.checkAndSaveLastSidewayLogs();
-    this.initCheckSignalScheduleJob(
-      this.configService.get('scheduledCronValue')!,
-    );
   }
 
   @TimeMeasure()
@@ -177,7 +180,7 @@ export class TradingService implements OnModuleInit {
           symbol,
           interval: interval as Interval,
         });
-        await this.notificationService.sendSignalStatusToUser(user, result);
+        await this.notificationService.sendStatusToUser(user, result);
       }
     }
   }
@@ -195,7 +198,7 @@ export class TradingService implements OnModuleInit {
                 symbol,
                 interval,
               });
-              await this.notificationService.sendSignalStatusToUsers(result);
+              await this.notificationService.sendStatusToUsers(result);
             } catch (e) {
               this.logger.error(
                 `${symbol} ${interval}`,

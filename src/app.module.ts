@@ -5,7 +5,7 @@ import configuration from '../config/configuration';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BotModule } from './bot/bot.module';
-import { AppConfig, DatabaseConfig } from './common/interface';
+import { AppConfig, DatabaseConfig, ENV } from './common/interface';
 import { NotificationModule } from './notification/notification.module';
 import { SignalLogEntity } from './signallog/entity/signalog.entity';
 import { SignalLogModule } from './signallog/signallog.module';
@@ -26,7 +26,7 @@ import { UserModule } from './user/user.module';
       inject: [ConfigService],
       useFactory: (configService: ConfigService<AppConfig>) => {
         const database = configService.get<DatabaseConfig>('database')!;
-        return {
+        const config = {
           type: 'postgres',
           host: database.host,
           port: database.port,
@@ -35,11 +35,20 @@ import { UserModule } from './user/user.module';
           database: database.name,
           entities: [UserEntity, UserConfigEntity, SignalLogEntity],
           synchronize: true,
+          ...(configService.get<ENV>('env') === 'production'
+            ? {
+                ssl: {
+                  rejectUnauthorized: false,
+                },
+              }
+            : {}),
           extra: {
             max: 5,
             idleTimeoutMillis: 30000,
           },
         };
+        console.log('xxx', config);
+        return config as any;
       },
     }),
     TradingModule,

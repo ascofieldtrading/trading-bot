@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import _ from 'lodash';
 import moment from 'moment';
-import { SendMessageOptions } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
 import { MarketTrend, SignalLogTriggerSource } from '../common/enums';
 import { MAStrategyResult } from '../common/interface';
@@ -20,7 +19,7 @@ export class NotificationService {
     private signalLogService: SignalLogService,
   ) {}
 
-  async sendSignalStatusToUsers(data: MAStrategyResult) {
+  async sendStatusToUsers(data: MAStrategyResult) {
     const users = await this.userSerice.getUsersBySymbolAndInterval(
       data.symbol,
       data.interval,
@@ -34,10 +33,10 @@ export class NotificationService {
           notified: true,
         },
       );
-      const shouldNotify = this.shouldNotify(data, lastSignalLog?.data);
+      const shouldNotify = this.shouldNotifyUser(data, lastSignalLog?.data);
       const userText = `user (telegramUserId=${user.telegramUserId})`;
       if (shouldNotify) {
-        await this.sendSignalStatusToUser(user, data);
+        await this.sendStatusToUser(user, data);
         this.logger.verbose([
           `Notified ${userText}`,
           `${data.symbol} - ${data.interval} - ${data.trend}`,
@@ -47,12 +46,11 @@ export class NotificationService {
     });
   }
 
-  public async sendSignalStatusToUser(
-    user: UserEntity,
-    data: MAStrategyResult,
-  ) {
+  public async sendStatusToUser(user: UserEntity, data: MAStrategyResult) {
     const content = this.getMAMessageContent(data);
-    await this.sendMessageToUser(user, content, { parse_mode: 'HTML' });
+    await this.botService.sendMultilineMessage(user.telegramChatId, content, {
+      parse_mode: 'HTML',
+    });
 
     const log = new SignalLogEntity({
       user,
@@ -70,26 +68,6 @@ export class NotificationService {
       this.signalLogService.save(log),
       this.signalLogService.saveSystemLogIfNeeded(log),
     ]);
-  }
-
-  async sendMessageToAllUsers(data: string[]) {
-    const users = await this.userSerice.getUsers();
-    const pros = users.map((u) =>
-      this.botService.sendMultilineMessage(u.telegramChatId, data),
-    );
-    return Promise.all(pros);
-  }
-
-  sendMessageToUser(
-    user: UserEntity,
-    data: string[],
-    options?: SendMessageOptions,
-  ) {
-    return this.botService.sendMultilineMessage(
-      user.telegramChatId,
-      data,
-      options,
-    );
   }
 
   private getMAMessageContent(data: MAStrategyResult): string[] {
@@ -144,7 +122,10 @@ export class NotificationService {
     return contentLines;
   }
 
-  private shouldNotify(newResult: MAStrategyResult, old?: MAStrategyResult) {
+  private shouldNotifyUser(
+    newResult: MAStrategyResult,
+    old?: MAStrategyResult,
+  ) {
     if (!old) return true;
     if (newResult.trend === old.trend) return false;
     if (newResult.maTrend !== old.maTrend) return true;
