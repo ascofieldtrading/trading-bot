@@ -44,10 +44,6 @@ export class NotificationService {
         ]);
         return;
       }
-      this.logger.verbose([
-        `Skip notify ${userText}`,
-        `${data.symbol} - ${data.interval} - ${data.trend}`,
-      ]);
     });
   }
 
@@ -96,14 +92,6 @@ export class NotificationService {
     );
   }
 
-  sendUserConfigs(user: UserEntity) {
-    return this.sendMessageToUser(user, [
-      'Bellow are your configs',
-      `Symbols: ${user.userConfig.symbols}`,
-      `Intervals: ${user.userConfig.intervals}`,
-    ]);
-  }
-
   private getMAMessageContent(data: MAStrategyResult): string[] {
     const getHeader = () => {
       const getTrendMessage = {
@@ -136,10 +124,10 @@ export class NotificationService {
       if (!data.lastSideway) return '';
       const date = moment(data.lastSideway.closeTime);
       const dateStr = `${date.fromNow()} (${date.format('DD/MM')} at ${date.format('HH:mm')})`;
+      const trendIcon = data.trend === MarketTrend.Bullish ? '🔼' : '🔽';
       return [
         '',
-        `↔️ Last MA Sideway`,
-        `Price: ${data.lastSideway.close.toFixed(4)}`,
+        `${trendIcon} Trend Started: ${data.lastSideway.close.toFixed(4)}`,
         `${dateStr}`,
       ];
     };

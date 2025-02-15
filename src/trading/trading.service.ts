@@ -3,16 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import Binance, { CandlesOptions } from 'binance-api-node';
 import { CronJob } from 'cron';
-import _ from 'lodash';
 import { Message } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
 import {
+  MA_PERIODS,
   NEW_USER_DEFAULT_INTERVALS,
   NEW_USER_DEFAULT_SYMBOLS,
 } from '../common/constant';
 import { TimeMeasure } from '../common/decorators';
 import { MarketTrend, SignalLogTriggerSource } from '../common/enums';
-import { AppConfig, LastSideway, MAStrategyResult } from '../common/interface';
+import { AppConfig, MAStrategyResult } from '../common/interface';
 import { CoinSymbol, Interval } from '../common/types';
 import { NotificationService } from '../notification/notification.service';
 import { SignalLogEntity } from '../signallog/entity/signalog.entity';
@@ -54,7 +54,7 @@ export class TradingService implements OnModuleInit {
         await this.notificationService.sendMessageToUser(user, [
           'Started to receive the coin signals',
         ]);
-        await this.notificationService.sendUserConfigs(user);
+        await this.botService.sendUserConfigs(user);
       }),
       onStop: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
@@ -65,11 +65,11 @@ export class TradingService implements OnModuleInit {
       }),
       onStatus: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
-        await this.notifySymbolStatusForUser(user);
+        await this.notifyStatusForUser(user);
       }),
       onUpdateIntervals: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
-        await this.updateUserFieldConfig({
+        await this.botService.updateUserFieldConfig({
           name: 'intervals',
           msg,
           user,
@@ -82,7 +82,7 @@ export class TradingService implements OnModuleInit {
       }),
       onUpdateSymbols: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
-        await this.updateUserFieldConfig({
+        await this.botService.updateUserFieldConfig({
           name: 'symbols',
           msg,
           user,
@@ -101,7 +101,7 @@ export class TradingService implements OnModuleInit {
         await this.notificationService.sendMessageToUser(user, [
           'Config reset!',
         ]);
-        await this.notificationService.sendUserConfigs(user);
+        await this.botService.sendUserConfigs(user);
       }),
     });
 
@@ -115,12 +115,11 @@ export class TradingService implements OnModuleInit {
   private initCheckSignalScheduleJob(cronValue: string) {
     this.logger.verbose(
       `Init schedule check and notify - using cron schedule: ${cronValue}`,
+      `Symbols: ${this.configService.get('symbols')}`,
+      `Intervals: ${this.configService.get('intervals')}`,
     );
 
-    const job = new CronJob(
-      cronValue,
-      this.checkAndNotifySymbolStatus.bind(this),
-    );
+    const job = new CronJob(cronValue, this.checkAndNotifyStatus.bind(this));
 
     this.schedulerRegistry.addCronJob('dynamicJob', job);
     job.start();
@@ -138,7 +137,7 @@ export class TradingService implements OnModuleInit {
           });
           const maStrategy = new MAStrategy({
             candles,
-            periods: [21, 50, 200],
+            periods: MA_PERIODS,
           });
           const result = maStrategy.calculateLastMASidewayPrice(candles);
           if (!result) return;
@@ -170,10 +169,8 @@ export class TradingService implements OnModuleInit {
     });
   }
 
-  async notifySymbolStatusForUser(user: UserEntity) {
-    this.logger.verbose(
-      `All intervals: ${this.configService.get('intervals')}`,
-    );
+  @TimeMeasure()
+  async notifyStatusForUser(user: UserEntity) {
     for (const symbol of user.userConfig.symbols.split(',')) {
       for (const interval of user.userConfig.intervals.split(',')) {
         const result = await this.getMAStrategyResult({
@@ -185,26 +182,29 @@ export class TradingService implements OnModuleInit {
     }
   }
 
-  private async checkAndNotifySymbolStatus() {
-    this.logger.verbose(
-      `All intervals: ${this.configService.get('intervals')}`,
-    );
-    this.configService.get('symbols').forEach((symbol) => {
-      this.configService.get('intervals').forEach(async (interval) => {
-        try {
-          const result = await this.getMAStrategyResult({
-            symbol,
-            interval,
-          });
-          await this.notificationService.sendSignalStatusToUsers(result);
-        } catch (e) {
-          this.logger.error(
-            `${symbol} ${interval}`,
-            `Failed to check and notify symbol status. Error ${e}`,
-          );
-        }
-      });
-    });
+  @TimeMeasure()
+  private async checkAndNotifyStatus() {
+    const promiseList = this.configService
+      .get<CoinSymbol[]>('symbols')!
+      .map((symbol) =>
+        this.configService
+          .get<Interval[]>('intervals')!
+          .map(async (interval) => {
+            try {
+              const result = await this.getMAStrategyResult({
+                symbol,
+                interval,
+              });
+              await this.notificationService.sendSignalStatusToUsers(result);
+            } catch (e) {
+              this.logger.error(
+                `${symbol} ${interval}`,
+                `Failed to check and notify symbol status. Error ${e}`,
+              );
+            }
+          }),
+      );
+    await Promise.all(promiseList.flat());
   }
 
   private async getMAStrategyResult(candleOptions: CandlesOptions) {
@@ -223,77 +223,24 @@ export class TradingService implements OnModuleInit {
       interval: candleOptions.interval,
       ...strategyResult,
     };
-    result.lastSideway =
-      result.trend !== MarketTrend.Sideway
-        ? await this.getLastMASideway(result)
-        : undefined;
+
+    if (result.trend !== MarketTrend.Sideway) {
+      const sidewayLog = await this.signalLogService.getLastMASideway({
+        interval: candleOptions.interval,
+        symbol: candleOptions.symbol as CoinSymbol,
+      });
+      if (sidewayLog) {
+        result.lastSideway = {
+          close: sidewayLog.lastClosePrice,
+          closeTime: sidewayLog.lastCloseAt,
+        };
+      }
+    }
 
     return result;
   }
 
-  private async getLastMASideway(
-    data: MAStrategyResult,
-  ): Promise<LastSideway | undefined> {
-    const signalLog = await this.signalLogService.getLastMASideway({
-      interval: data.interval,
-      symbol: data.symbol,
-    });
-    if (!signalLog) return undefined;
-    return {
-      close: signalLog.lastClosePrice,
-      closeTime: signalLog.lastCloseAt,
-    };
-  }
-
   private getCandles(candleOptions: CandlesOptions) {
-    return this.client.candles({
-      ...candleOptions,
-    });
-  }
-
-  private async updateUserFieldConfig(params: {
-    user: UserEntity;
-    name: string;
-    msg: Message;
-    allOptions: string[];
-    onUpdate: (options: string[]) => Promise<void>;
-  }) {
-    const prompt = await this.notificationService.sendMessageToUser(
-      params.user,
-      [
-        `Enter your new ${params.name}`,
-        '',
-        `Supported ${params.name}:`,
-        ...params.allOptions.map((val) => `- ${val}`),
-      ],
-      {
-        reply_markup: {
-          force_reply: true,
-        },
-      },
-    );
-    if (!prompt?.message_id) return;
-    this.botService.bot.onReplyToMessage(
-      params.msg.chat.id,
-      prompt.message_id,
-      async (msg) => {
-        if (!msg.text) return;
-        const newOptionsText = msg.text;
-        const newOptions = newOptionsText.split(/,|\n|\s/) as Interval[];
-        const isValid =
-          _.difference(newOptions, params.allOptions).length === 0;
-        if (isValid) {
-          await params.onUpdate(newOptions);
-          await this.notificationService.sendMessageToUser(params.user, [
-            `${_.upperFirst(params.name)} updated!`,
-          ]);
-          await this.notificationService.sendUserConfigs(params.user);
-          return;
-        }
-        await this.notificationService.sendMessageToUser(params.user, [
-          `${_.upperFirst(params.name)} invalid`,
-        ]);
-      },
-    );
+    return this.client.candles(candleOptions);
   }
 }

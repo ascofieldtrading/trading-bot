@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import _ from 'lodash';
 import TelegramBot, {
   Message,
   SendMessageOptions,
 } from 'node-telegram-bot-api';
 import { AppConfig } from 'src/common/interface';
 import { Command } from '../common/enums';
+import { Interval } from '../common/types';
+import { UserEntity } from '../user/entity/user.entity';
 
 type CommandFn = (msg: Message) => void;
 
@@ -93,5 +96,59 @@ export class BotService {
       return;
     }
     return this.sendMessage(chatId, data.join('\n'), options);
+  }
+
+  async updateUserFieldConfig(params: {
+    user: UserEntity;
+    name: string;
+    msg: Message;
+    allOptions: string[];
+    onUpdate: (options: string[]) => Promise<void>;
+  }) {
+    const prompt = await this.sendMultilineMessage(
+      params.user.telegramChatId,
+      [
+        `Enter your new ${params.name}`,
+        '',
+        `Supported ${params.name}:`,
+        ...params.allOptions.map((val) => `- ${val}`),
+      ],
+      {
+        reply_markup: {
+          force_reply: true,
+        },
+      },
+    );
+    if (!prompt?.message_id) return;
+    this.bot.onReplyToMessage(
+      params.msg.chat.id,
+      prompt.message_id,
+      async (msg) => {
+        if (!msg.text) return;
+        const newOptionsText = msg.text;
+        const newOptions = newOptionsText.split(/,|\n|\s/) as Interval[];
+        const isValid =
+          _.difference(newOptions, params.allOptions).length === 0;
+        if (isValid) {
+          await params.onUpdate(newOptions);
+          await this.sendMultilineMessage(params.user.telegramChatId, [
+            `${_.upperFirst(params.name)} updated!`,
+          ]);
+          await this.sendUserConfigs(params.user);
+          return;
+        }
+        await this.sendMultilineMessage(params.user.telegramChatId, [
+          `${_.upperFirst(params.name)} invalid`,
+        ]);
+      },
+    );
+  }
+
+  sendUserConfigs(user: UserEntity) {
+    return this.sendMultilineMessage(user.telegramChatId, [
+      'Bellow are your configs',
+      `Symbols: ${user.userConfig.symbols}`,
+      `Intervals: ${user.userConfig.intervals}`,
+    ]);
   }
 }
