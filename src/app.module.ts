@@ -35,7 +35,6 @@ import { UserModule } from './user/user.module';
           database: database.name,
           entities: [UserEntity, UserConfigEntity, SignalLogEntity],
           synchronize: true,
-          ssl: { rejectUnauthorized: false },
           extra: {
             max: 5,
             idleTimeoutMillis: 30000,

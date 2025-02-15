@@ -26,4 +26,5 @@ export default () =>
       username: process.env.DATABASE_USERNAME,
       password: process.env.DATABASE_PASSWORD,
     },
+    env: process.env.NODE_ENV ?? 'development',
   }) as AppConfig;

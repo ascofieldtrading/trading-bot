@@ -1,5 +1,7 @@
 import { MarketTrend } from './enums';
 import { CoinSymbol, Interval } from './types';
+
+export type ENV = 'development' | 'production';
 export interface DatabaseConfig {
   host: string;
   port: number;
@@ -9,6 +11,7 @@ export interface DatabaseConfig {
 }
 
 export interface AppConfig {
+  env: ENV;
   binanceApiKey: string;
   binanceSecretKey: string;
   telegramBotToken: string;
