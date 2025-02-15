@@ -1,12 +1,12 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { MarketTrend } from '../../common/enums';
+import { CreatedAtColumn } from '../../common/decorators';
+import { MarketTrend, SignalLogType } from '../../common/enums';
 import { MAStrategyResult } from '../../common/interface';
 import { CoinSymbol, Interval } from '../../common/types';
 import { UserEntity } from '../../user/entity/user.entity';
@@ -34,18 +34,25 @@ export class SignalLogEntity {
   @Column()
   trend: MarketTrend;
 
-  @Column()
-  closedAt: Date;
+  @Column({ type: 'float' })
+  lastClosePrice: number;
 
-  @Column()
+  @Column({ type: 'timestamp with time zone' })
+  lastCloseAt: Date;
+
+  @Column({ default: SignalLogType.UpdateRealtime })
+  type: SignalLogType;
+
+  @Column({ default: false })
   notified: boolean;
 
   @Column({
     type: 'jsonb',
     nullable: false,
+    default: {},
   })
   data: SignalLogData;
 
-  @CreateDateColumn()
+  @CreatedAtColumn()
   createdAt: Date;
 }

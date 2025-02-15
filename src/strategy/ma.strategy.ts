@@ -22,26 +22,34 @@ export class MAStrategy {
   }
 
   calculate() {
-    const prices = this.candles.map((item) => Number(item.close));
+    const closePrices = this.candles.map((item) => Number(item.close));
     const maResultList = this.periods.map((period) =>
-      wema({ values: prices, period: period }),
+      wema({ values: closePrices, period: period }),
     );
-    const lastMA = maResultList.map((item) => _.last(item)!);
-    const rsiResultList = rsi({ values: prices, period: 14 });
-    const lastRSI = _.last(rsiResultList)!;
+    const rsiResultList = rsi({ values: closePrices, period: 14 });
 
-    const lastOpenPrice = _.last(prices)!;
+    const lastClosePrice = _.last(closePrices)!;
     const trend = this.getMarketTrend(
       maResultList,
       rsiResultList,
-      lastOpenPrice,
+      lastClosePrice,
     );
     // const lastSideWayPrice =
     //   trend !== MarketTrend.Sideway
     //     ? this.lastSideWay(maResultList, trend.maTrend)
     //     : undefined;
 
-    return { trend, lastOpenPrice, lastMA, lastRSI };
+    const lastMA = maResultList.map((item) => _.last(item)!);
+    const lastRSI = _.last(rsiResultList)!;
+    const lastCloseTime = new Date(_.last(this.candles)!.closeTime);
+
+    return {
+      trend,
+      lastClosePrice,
+      lastCloseTime,
+      lastMA,
+      lastRSI,
+    };
   }
 
   private getMarketTrend(

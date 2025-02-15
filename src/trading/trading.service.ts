@@ -7,14 +7,14 @@ import _ from 'lodash';
 import { Message } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
 import {
-  COIN_SYMBOLS,
-  INTERVALS,
   NEW_USER_DEFAULT_INTERVALS,
   NEW_USER_DEFAULT_SYMBOLS,
 } from '../common/constant';
-import { AppConfig, MAStrategyResult } from '../common/interface';
+import { MarketTrend } from '../common/enums';
+import { AppConfig, LastSideway, MAStrategyResult } from '../common/interface';
 import { CoinSymbol, Interval } from '../common/types';
 import { NotificationService } from '../notification/notification.service';
+import { SignalLogService } from '../signallog/signallog.service';
 import { MAStrategy } from '../strategy/ma.strategy';
 import { UserEntity } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
@@ -30,6 +30,7 @@ export class TradingService implements OnModuleInit {
     private readonly notificationService: NotificationService,
     private readonly botService: BotService,
     private readonly userService: UserService,
+    private readonly signalLogService: SignalLogService,
   ) {
     this.client = Binance({
       apiKey: configService.get('binanceApiKey'),
@@ -70,7 +71,7 @@ export class TradingService implements OnModuleInit {
           name: 'intervals',
           msg,
           user,
-          allOptions: INTERVALS,
+          allOptions: this.configService.get('intervals')!,
           onUpdate: async (options) => {
             user.userConfig.intervals = options.join(',');
             await this.userService.update(user);
@@ -83,7 +84,7 @@ export class TradingService implements OnModuleInit {
           name: 'symbols',
           msg,
           user,
-          allOptions: COIN_SYMBOLS,
+          allOptions: this.configService.get('symbols')!,
           onUpdate: async (options) => {
             user.userConfig.symbols = options.join(',');
             await this.userService.update(user);
@@ -137,14 +138,14 @@ export class TradingService implements OnModuleInit {
     this.logger.verbose(
       `All intervals: ${this.configService.get('intervals')}`,
     );
-    COIN_SYMBOLS.forEach((symbol) => {
-      INTERVALS.forEach(async (interval) => {
+    this.configService.get('symbols').forEach((symbol) => {
+      this.configService.get('intervals').forEach(async (interval) => {
         try {
           const result = await this.getMAStrategyResult({
             symbol,
             interval,
           });
-          await this.notificationService.sendSignalStautsToUsers(result);
+          await this.notificationService.sendSignalStatusToUsers(result);
         } catch (e) {
           this.logger.error(
             `${symbol} ${interval}`,
@@ -164,21 +165,45 @@ export class TradingService implements OnModuleInit {
       candles,
       periods: [21, 50, 200],
     });
-    const { trend, lastOpenPrice, lastMA, lastRSI } = maStrategy.calculate();
+    const { trend, lastClosePrice, lastCloseTime, lastMA, lastRSI } =
+      maStrategy.calculate();
 
     const result: MAStrategyResult = {
       symbol: candleOptions.symbol as CoinSymbol,
       interval: candleOptions.interval,
-      lastOpenPrice,
+      lastClosePrice,
+      lastCloseTime,
       lastMA: lastMA,
       lastRSI,
       ...trend,
     };
+    result.lastSideway =
+      result.trend !== MarketTrend.Sideway
+        ? await this.getLastSideway(result)
+        : undefined;
+
     return result;
   }
 
+  private async getLastSideway(
+    data: MAStrategyResult,
+  ): Promise<LastSideway | undefined> {
+    const signalLog = await this.signalLogService.getLastSideway({
+      interval: data.interval,
+      symbol: data.symbol,
+    });
+    if (!signalLog) return undefined;
+    return {
+      close: signalLog.lastClosePrice,
+      closeTime: signalLog.lastCloseAt,
+    };
+  }
+
   private getCandles(candleOptions: CandlesOptions) {
-    return this.client.candles(candleOptions);
+    return this.client.candles({
+      ...candleOptions,
+      // endTime: moment().subtract(2, 'hour').toDate().getTime(),
+    });
   }
 
   private async updateUserFieldConfig(params: {

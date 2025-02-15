@@ -28,10 +28,17 @@ export interface Trend {
   rsiTrend: MarketTrend;
 }
 
+export interface LastSideway {
+  close: number;
+  closeTime: Date;
+}
+
 export interface MAStrategyResult extends Trend {
   symbol: CoinSymbol;
   interval: Interval;
-  lastOpenPrice: number;
+  lastSideway?: LastSideway;
+  lastClosePrice: number;
+  lastCloseTime: Date;
   lastRSI: number;
   lastMA: number[];
 }

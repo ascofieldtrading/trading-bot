@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import _ from 'lodash';
+import moment from 'moment';
 import { SendMessageOptions } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
 import { MarketTrend } from '../common/enums';
@@ -18,7 +19,7 @@ export class NotificationService {
     private signalLogService: SignalLogService,
   ) {}
 
-  async sendSignalStautsToUsers(data: MAStrategyResult) {
+  async sendSignalStatusToUsers(data: MAStrategyResult) {
     const users = await this.userSerice.getUsersBySymbolAndInterval(
       [data.symbol],
       [data.interval],
@@ -95,20 +96,28 @@ export class NotificationService {
       (prev, current, i) => [...prev, `MA${i + 1}: ${current.toFixed(4)}`],
       [],
     );
-    const trendIcon = {
+    const getTrendMessage = {
       [MarketTrend.Bullish]: (msg) => `🟢 ${msg}`,
       [MarketTrend.Bearish]: (msg) => `🔴 ${msg}`,
       [MarketTrend.Sideway]: (msg) => msg,
     };
+
+    const lastSidewayPriceContent: string[] = data.lastSideway
+      ? [
+          `Last Sideway: ${data.lastSideway.close.toFixed(4)} (${moment(data.lastSideway.closeTime).fromNow()})`,
+        ]
+      : [];
     return [
-      trendIcon[data.trend](
+      getTrendMessage[data.trend](
         `${data.symbol} ${data.interval} ${_.upperFirst(data.trend)}`,
       ),
       '',
       ...maValues,
       `RSI: ${data.lastRSI}`,
       '',
-      `Last Price: ${data.lastOpenPrice}`,
+      `Last Price: ${data.lastClosePrice}`,
+      '',
+      ...lastSidewayPriceContent,
     ];
   }
 

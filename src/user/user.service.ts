@@ -58,6 +58,9 @@ export class UserService {
 
     const newUser = new UserEntity();
     newUser.userConfig = userConfig;
+    newUser.username = message.from?.username;
+    newUser.firstName = message.from?.first_name;
+    newUser.telegramUserId = message.from!.id;
     newUser.telegramUserId = message.from!.id;
     newUser.telegramChatId = message.chat.id;
     return this.userRepository.save(newUser);

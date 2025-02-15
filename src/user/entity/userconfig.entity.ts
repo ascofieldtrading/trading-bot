@@ -1,12 +1,11 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   JoinColumn,
   OneToOne,
   PrimaryGeneratedColumn,
-  UpdateDateColumn,
 } from 'typeorm';
+import { CreatedAtColumn, UpdatedAtColumn } from '../../common/decorators';
 import { UserEntity } from './user.entity';
 
 @Entity({ name: 'user_config' })
@@ -26,9 +25,9 @@ export class UserConfigEntity {
   @Column()
   intervals: string;
 
-  @CreateDateColumn()
+  @CreatedAtColumn()
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdatedAtColumn()
   updatedAt: Date;
 }

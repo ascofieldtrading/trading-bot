@@ -36,11 +36,9 @@ import { UserModule } from './user/user.module';
           entities: [UserEntity, UserConfigEntity, SignalLogEntity],
           synchronize: true,
           ssl: { rejectUnauthorized: false },
-          connectTimeoutMS: 3600000,
           extra: {
-            max: 2,
+            max: 3,
             idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: 2000,
           },
         };
       },
