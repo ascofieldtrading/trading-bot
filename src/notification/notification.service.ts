@@ -130,6 +130,12 @@ export class NotificationService {
     if (newResult.trend === old.trend) return false;
     if (newResult.maTrend !== old.maTrend) return true;
     if (
+      newResult.trend !== MarketTrend.Sideway &&
+      old.maTrend === MarketTrend.Sideway
+    )
+      return true;
+
+    if (
       old.trend === MarketTrend.Bearish &&
       newResult.lastClosePrice >= newResult.lastMA[1]
     )

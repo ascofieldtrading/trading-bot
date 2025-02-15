@@ -91,12 +91,27 @@ describe('NotificationService', () => {
       },
       expectedOutput: true,
     },
+    {
+      new: {
+        trend: MarketTrend.Bearish,
+        maTrend: MarketTrend.Sideway,
+        lastClosePrice: 99,
+        lastMA: [101, 101, 102],
+      },
+      old: {
+        trend: MarketTrend.Sideway,
+        maTrend: MarketTrend.Sideway,
+        lastClosePrice: 99,
+        lastMA: [101, 101, 102],
+      },
+      expectedOutput: true,
+    },
     // FALSE
     {
       new: {
         trend: MarketTrend.Sideway,
         maTrend: MarketTrend.Bearish,
-        lastClosePrice: 100,
+        lastClosePrice: 100.9,
         lastMA: [100, 101, 102],
       },
       old: {
@@ -104,21 +119,6 @@ describe('NotificationService', () => {
         maTrend: MarketTrend.Bearish,
         lastClosePrice: 99,
         lastMA: [100, 101, 102],
-      },
-      expectedOutput: false,
-    },
-    {
-      new: {
-        trend: MarketTrend.Bearish,
-        maTrend: MarketTrend.Sideway,
-        lastClosePrice: 99,
-        lastMA: [101, 101, 102],
-      },
-      old: {
-        trend: MarketTrend.Sideway,
-        maTrend: MarketTrend.Sideway,
-        lastClosePrice: 99,
-        lastMA: [101, 101, 102],
       },
       expectedOutput: false,
     },
@@ -137,7 +137,7 @@ describe('NotificationService', () => {
       old: Partial<MAStrategyResult>;
       expectedOutput: boolean;
     }) => {
-      const result = service['shouldNotify'](
+      const result = service['shouldNotifyUser'](
         newData as MAStrategyResult,
         oldData as MAStrategyResult,
       );
