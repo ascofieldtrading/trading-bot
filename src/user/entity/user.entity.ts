@@ -7,8 +7,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserConfigEntity } from './userconfig.entity';
 import { SignalLogEntity } from '../../signallog/entity/signalog.entity';
+import { UserConfigEntity } from './userconfig.entity';
 
 @Entity({ name: 'user' })
 export class UserEntity {
@@ -17,6 +17,12 @@ export class UserEntity {
 
   @Column({ unique: true })
   telegramUserId: number;
+
+  @Column()
+  username: string;
+
+  @Column()
+  fullName: string;
 
   @Column({ unique: true })
   telegramChatId: number;

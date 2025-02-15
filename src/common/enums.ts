@@ -1,7 +1,7 @@
 export enum MarketTrend {
-  Bullish = 'Bullish',
-  Bearish = 'Bearish',
-  Sideway = 'Sideway',
+  Bullish = 'bullish',
+  Bearish = 'bearish',
+  Sideway = 'sideway',
 }
 
 export enum Command {
@@ -11,4 +11,9 @@ export enum Command {
   UpdateSymbols = 'update_symbols',
   UpdateIntervals = 'update_intervals',
   ResetConfig = 'reset_config',
+}
+
+export enum SignalLogType {
+  UpdateRealtime = 'realtime_update',
+  UpdateLastSideway = 'schedule_update',
 }

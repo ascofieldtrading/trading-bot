@@ -15,7 +15,7 @@ import {
 import { AppConfig, MAStrategyResult } from '../common/interface';
 import { CoinSymbol, Interval } from '../common/types';
 import { NotificationService } from '../notification/notification.service';
-import { TheMovingAverageStrategy } from '../strategy/themovingaverage.strategy';
+import { MAStrategy } from '../strategy/ma.strategy';
 import { UserEntity } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
 
@@ -148,7 +148,7 @@ export class TradingService implements OnModuleInit {
         } catch (e) {
           this.logger.error(
             `${symbol} ${interval}`,
-            `Failed to check and notify sumbol status. Error ${e}`,
+            `Failed to check and notify symbol status. Error ${e}`,
           );
         }
       });
@@ -160,7 +160,7 @@ export class TradingService implements OnModuleInit {
       ...candleOptions,
       limit: this.configService.get('fetchPriceLimit'),
     });
-    const maStrategy = new TheMovingAverageStrategy({
+    const maStrategy = new MAStrategy({
       candles,
       periods: [21, 50, 200],
     });

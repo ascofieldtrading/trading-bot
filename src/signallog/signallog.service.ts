@@ -23,8 +23,9 @@ export class SignalLogService {
     log.user = params.user;
     log.interval = params.logData.interval;
     log.symbol = params.logData.symbol;
-    log.notified = params.isNotified;
+    log.trend = params.logData.trend;
     log.data = params.logData;
+    log.notified = params.isNotified;
     return this.signalLogRepository.save(log);
   }
 

@@ -1,6 +1,6 @@
 import { MarketTrend } from '../common/enums';
 import { MAStrategyResult } from '../common/interface';
-import { TheMovingAverageStrategy } from './themovingaverage.strategy';
+import { MAStrategy } from './ma.strategy';
 
 describe('TheMovingAverageStrategy', () => {
   it.each([
@@ -85,7 +85,7 @@ describe('TheMovingAverageStrategy', () => {
       lastOpenPrice: number;
       expectedOutput: MAStrategyResult;
     }) => {
-      const strategy = new TheMovingAverageStrategy();
+      const strategy = new MAStrategy();
 
       const result = strategy['getMarketTrend'](
         data.maList,

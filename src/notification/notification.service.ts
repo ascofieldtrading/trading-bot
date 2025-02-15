@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import _ from 'lodash';
 import { SendMessageOptions } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
 import { MarketTrend } from '../common/enums';
@@ -95,12 +96,14 @@ export class NotificationService {
       [],
     );
     const trendIcon = {
-      [MarketTrend.Bullish]: (msg) => `🟢 ${msg} 🟢`,
-      [MarketTrend.Bearish]: (msg) => `🔴 ${msg} 🔴`,
+      [MarketTrend.Bullish]: (msg) => `🟢 ${msg}`,
+      [MarketTrend.Bearish]: (msg) => `🔴 ${msg}`,
       [MarketTrend.Sideway]: (msg) => msg,
     };
     return [
-      trendIcon[data.trend](`${data.symbol} ${data.interval} ${data.trend}`),
+      trendIcon[data.trend](
+        `${data.symbol} ${data.interval} ${_.upperFirst(data.trend)}`,
+      ),
       '',
       ...maValues,
       `RSI: ${data.lastRSI}`,
