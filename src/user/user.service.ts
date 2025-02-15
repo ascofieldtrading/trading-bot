@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Message } from 'node-telegram-bot-api';
-import { FindOptionsWhere, Like, Repository } from 'typeorm';
+import { FindOptionsWhere, Raw, Repository } from 'typeorm';
 import {
   NEW_USER_DEFAULT_INTERVALS,
   NEW_USER_DEFAULT_SYMBOLS,
@@ -20,21 +20,22 @@ export class UserService {
   ) {}
 
   async getUsersBySymbolAndInterval(
-    symbols: string[],
-    intervals: string[],
+    symbols: string,
+    intervals: string,
     { notificationEnabled = true }: Partial<UserEntity> = {
       notificationEnabled: true,
     },
   ) {
-    return this.userRepository.find({
+    const result = await this.userRepository.find({
       where: {
         notificationEnabled,
         userConfig: {
-          symbols: Like(`%${symbols.join(',')}%`),
-          intervals: Like(`%${intervals.join(',')}%`),
+          symbols: Raw((alias) => `${alias} ~ '(^|,)${symbols}(,|$)'`),
+          intervals: Raw((alias) => `${alias} ~ '(^|,)${intervals}(,|$)'`),
         },
       },
     });
+    return result;
   }
 
   async getUsers(

@@ -6,15 +6,17 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { CreatedAtColumn } from '../../common/decorators';
-import { MarketTrend, SignalLogType } from '../../common/enums';
+import { MarketTrend, SignalLogTriggerSource } from '../../common/enums';
 import { MAStrategyResult } from '../../common/interface';
 import { CoinSymbol, Interval } from '../../common/types';
 import { UserEntity } from '../../user/entity/user.entity';
 
-export interface SignalLogData extends MAStrategyResult {}
-
 @Entity({ name: 'signal_log' })
 export class SignalLogEntity {
+  constructor(init?: Partial<SignalLogEntity>) {
+    init && Object.assign(this, init);
+  }
+
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -34,14 +36,17 @@ export class SignalLogEntity {
   @Column()
   trend: MarketTrend;
 
+  @Column()
+  maTrend: MarketTrend;
+
   @Column({ type: 'float' })
   lastClosePrice: number;
 
   @Column({ type: 'timestamp with time zone' })
   lastCloseAt: Date;
 
-  @Column({ default: SignalLogType.UpdateRealtime })
-  type: SignalLogType;
+  @Column()
+  triggerSource: SignalLogTriggerSource;
 
   @Column({ default: false })
   notified: boolean;
@@ -51,7 +56,7 @@ export class SignalLogEntity {
     nullable: false,
     default: {},
   })
-  data: SignalLogData;
+  data: MAStrategyResult;
 
   @CreatedAtColumn()
   createdAt: Date;

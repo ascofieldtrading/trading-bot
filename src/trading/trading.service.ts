@@ -10,10 +10,12 @@ import {
   NEW_USER_DEFAULT_INTERVALS,
   NEW_USER_DEFAULT_SYMBOLS,
 } from '../common/constant';
-import { MarketTrend } from '../common/enums';
+import { TimeMeasure } from '../common/decorators';
+import { MarketTrend, SignalLogTriggerSource } from '../common/enums';
 import { AppConfig, LastSideway, MAStrategyResult } from '../common/interface';
 import { CoinSymbol, Interval } from '../common/types';
 import { NotificationService } from '../notification/notification.service';
+import { SignalLogEntity } from '../signallog/entity/signalog.entity';
 import { SignalLogService } from '../signallog/signallog.service';
 import { MAStrategy } from '../strategy/ma.strategy';
 import { UserEntity } from '../user/entity/user.entity';
@@ -63,7 +65,7 @@ export class TradingService implements OnModuleInit {
       }),
       onStatus: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
-        await this.checkAndNotifySymbolStatusForUser(user);
+        await this.notifySymbolStatusForUser(user);
       }),
       onUpdateIntervals: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
@@ -103,23 +105,72 @@ export class TradingService implements OnModuleInit {
       }),
     });
 
-    const initCheckSignalJob = () => {
-      this.logger.verbose(
-        `Init schedule check and notify - using cron schedule: ${this.configService.get('scheduledCronValue')}`,
-      );
-
-      const job = new CronJob(
-        this.configService.get('scheduledCronValue')!,
-        this.checkAndNotifySymbolStatus.bind(this),
-      );
-
-      this.schedulerRegistry.addCronJob('dynamicJob', job);
-      job.start();
-    };
-    initCheckSignalJob();
+    await this.checkAndSaveLastSidewayLogs();
+    this.initCheckSignalScheduleJob(
+      this.configService.get('scheduledCronValue')!,
+    );
   }
 
-  async checkAndNotifySymbolStatusForUser(user: UserEntity) {
+  @TimeMeasure()
+  private initCheckSignalScheduleJob(cronValue: string) {
+    this.logger.verbose(
+      `Init schedule check and notify - using cron schedule: ${cronValue}`,
+    );
+
+    const job = new CronJob(
+      cronValue,
+      this.checkAndNotifySymbolStatus.bind(this),
+    );
+
+    this.schedulerRegistry.addCronJob('dynamicJob', job);
+    job.start();
+  }
+
+  @TimeMeasure()
+  async checkAndSaveLastSidewayLogs() {
+    this.configService.get('symbols').forEach((symbol) => {
+      this.configService.get('intervals').forEach(async (interval) => {
+        try {
+          const candles = await this.getCandles({
+            symbol,
+            interval,
+            limit: this.configService.get('fetchPriceLimit'),
+          });
+          const maStrategy = new MAStrategy({
+            candles,
+            periods: [21, 50, 200],
+          });
+          const result = maStrategy.calculateLastMASidewayPrice(candles);
+          if (!result) return;
+          const maResult: MAStrategyResult = {
+            ...result,
+            symbol,
+            interval,
+          };
+
+          const log = new SignalLogEntity({
+            interval: maResult.interval,
+            symbol: maResult.symbol,
+            trend: maResult.trend,
+            maTrend: maResult.maTrend,
+            lastClosePrice: maResult.lastClosePrice,
+            lastCloseAt: maResult.lastCloseTime,
+            triggerSource: SignalLogTriggerSource.AppStart,
+            data: maResult,
+          });
+
+          await this.signalLogService.saveAppStartLogIfNotExists(log);
+        } catch (e) {
+          this.logger.error(
+            `${symbol} ${interval}`,
+            `Failed to update last sideway. Error ${e}`,
+          );
+        }
+      });
+    });
+  }
+
+  async notifySymbolStatusForUser(user: UserEntity) {
     this.logger.verbose(
       `All intervals: ${this.configService.get('intervals')}`,
     );
@@ -165,30 +216,25 @@ export class TradingService implements OnModuleInit {
       candles,
       periods: [21, 50, 200],
     });
-    const { trend, lastClosePrice, lastCloseTime, lastMA, lastRSI } =
-      maStrategy.calculate();
+    const strategyResult = maStrategy.calculate();
 
     const result: MAStrategyResult = {
       symbol: candleOptions.symbol as CoinSymbol,
       interval: candleOptions.interval,
-      lastClosePrice,
-      lastCloseTime,
-      lastMA: lastMA,
-      lastRSI,
-      ...trend,
+      ...strategyResult,
     };
     result.lastSideway =
       result.trend !== MarketTrend.Sideway
-        ? await this.getLastSideway(result)
+        ? await this.getLastMASideway(result)
         : undefined;
 
     return result;
   }
 
-  private async getLastSideway(
+  private async getLastMASideway(
     data: MAStrategyResult,
   ): Promise<LastSideway | undefined> {
-    const signalLog = await this.signalLogService.getLastSideway({
+    const signalLog = await this.signalLogService.getLastMASideway({
       interval: data.interval,
       symbol: data.symbol,
     });
@@ -202,7 +248,6 @@ export class TradingService implements OnModuleInit {
   private getCandles(candleOptions: CandlesOptions) {
     return this.client.candles({
       ...candleOptions,
-      // endTime: moment().subtract(2, 'hour').toDate().getTime(),
     });
   }
 

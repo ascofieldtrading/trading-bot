@@ -56,11 +56,11 @@ export class BotService {
         description: 'Show current status of the coins',
       },
       {
-        command: Command.UpdateSymbols,
+        command: Command.SetSymbols,
         description: 'Update coin symbols',
       },
       {
-        command: Command.UpdateIntervals,
+        command: Command.SetIntervals,
         description: 'Update interval',
       },
       {
@@ -74,8 +74,8 @@ export class BotService {
     initCommand(Command.Start, onStart);
     initCommand(Command.Stop, onStop);
     initCommand(Command.Status, onStatus);
-    initCommand(Command.UpdateSymbols, onUpdateSymbols);
-    initCommand(Command.UpdateIntervals, onUpdateIntervals);
+    initCommand(Command.SetSymbols, onUpdateSymbols);
+    initCommand(Command.SetIntervals, onUpdateIntervals);
     initCommand(Command.ResetConfig, onResetConfig);
   }
 

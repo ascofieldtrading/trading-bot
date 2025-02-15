@@ -20,10 +20,10 @@ export class UserEntity {
   @Column({ nullable: true })
   firstName?: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'bigint', unique: true })
   telegramUserId: number;
 
-  @Column({ unique: true })
+  @Column({ type: 'bigint', unique: true })
   telegramChatId: number;
 
   @Column({ default: true })

@@ -35,10 +35,14 @@ describe('NotificationService', () => {
       new: {
         trend: MarketTrend.Sideway,
         maTrend: MarketTrend.Sideway,
+        lastClosePrice: 100,
+        lastMA: [101, 101, 102],
       },
       old: {
         trend: MarketTrend.Bearish,
         maTrend: MarketTrend.Bearish,
+        lastClosePrice: 99,
+        lastMA: [100, 101, 102],
       },
       expectedOutput: true,
     },
@@ -46,10 +50,44 @@ describe('NotificationService', () => {
       new: {
         trend: MarketTrend.Bearish,
         maTrend: MarketTrend.Bearish,
+        lastClosePrice: 99,
+        lastMA: [100, 101, 102],
       },
       old: {
         trend: MarketTrend.Sideway,
         maTrend: MarketTrend.Sideway,
+        lastClosePrice: 100,
+        lastMA: [101, 101, 102],
+      },
+      expectedOutput: true,
+    },
+    {
+      new: {
+        trend: MarketTrend.Sideway,
+        maTrend: MarketTrend.Bearish,
+        lastClosePrice: 101,
+        lastMA: [100, 101, 102],
+      },
+      old: {
+        trend: MarketTrend.Bearish,
+        maTrend: MarketTrend.Bearish,
+        lastClosePrice: 99,
+        lastMA: [100, 101, 102],
+      },
+      expectedOutput: true,
+    },
+    {
+      new: {
+        trend: MarketTrend.Sideway,
+        maTrend: MarketTrend.Bullish,
+        lastClosePrice: 101,
+        lastMA: [102, 101, 100],
+      },
+      old: {
+        trend: MarketTrend.Bullish,
+        maTrend: MarketTrend.Bullish,
+        lastClosePrice: 103,
+        lastMA: [102, 101, 100],
       },
       expectedOutput: true,
     },
@@ -58,10 +96,14 @@ describe('NotificationService', () => {
       new: {
         trend: MarketTrend.Sideway,
         maTrend: MarketTrend.Bearish,
+        lastClosePrice: 100,
+        lastMA: [100, 101, 102],
       },
       old: {
         trend: MarketTrend.Bearish,
         maTrend: MarketTrend.Bearish,
+        lastClosePrice: 99,
+        lastMA: [100, 101, 102],
       },
       expectedOutput: false,
     },
@@ -69,25 +111,36 @@ describe('NotificationService', () => {
       new: {
         trend: MarketTrend.Bearish,
         maTrend: MarketTrend.Sideway,
+        lastClosePrice: 99,
+        lastMA: [101, 101, 102],
       },
       old: {
         trend: MarketTrend.Sideway,
         maTrend: MarketTrend.Sideway,
+        lastClosePrice: 99,
+        lastMA: [101, 101, 102],
       },
       expectedOutput: false,
     },
-  ])(
-    'should notify when # market trend and # ma trend',
+  ] as {
+    new: Partial<MAStrategyResult>;
+    old: Partial<MAStrategyResult>;
+    expectedOutput: boolean;
+  }[])(
+    'should notify',
     ({
       new: newData,
       old: oldData,
       expectedOutput,
     }: {
-      new: MAStrategyResult;
-      old: MAStrategyResult;
+      new: Partial<MAStrategyResult>;
+      old: Partial<MAStrategyResult>;
       expectedOutput: boolean;
     }) => {
-      const result = service['shouldNotify'](newData, oldData);
+      const result = service['shouldNotify'](
+        newData as MAStrategyResult,
+        oldData as MAStrategyResult,
+      );
       expect(result).toBe(expectedOutput);
     },
   );

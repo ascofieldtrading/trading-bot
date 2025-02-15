@@ -33,12 +33,14 @@ export interface LastSideway {
   closeTime: Date;
 }
 
-export interface MAStrategyResult extends Trend {
-  symbol: CoinSymbol;
-  interval: Interval;
+export interface StrategyResult extends Trend {
   lastSideway?: LastSideway;
   lastClosePrice: number;
   lastCloseTime: Date;
   lastRSI: number;
   lastMA: number[];
+}
+export interface MAStrategyResult extends StrategyResult {
+  symbol: CoinSymbol;
+  interval: Interval;
 }

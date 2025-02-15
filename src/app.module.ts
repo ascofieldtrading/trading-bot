@@ -37,7 +37,7 @@ import { UserModule } from './user/user.module';
           synchronize: true,
           ssl: { rejectUnauthorized: false },
           extra: {
-            max: 3,
+            max: 5,
             idleTimeoutMillis: 30000,
           },
         };

@@ -2,11 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
-import { MarketTrend, SignalLogType } from '../common/enums';
+import { MarketTrend, SignalLogTriggerSource } from '../common/enums';
 import { AppConfig } from '../common/interface';
 import { CoinSymbol, Interval } from '../common/types';
-import { UserEntity } from '../user/entity/user.entity';
-import { SignalLogData, SignalLogEntity } from './entity/signalog.entity';
+import { SignalLogEntity } from './entity/signalog.entity';
 
 @Injectable()
 export class SignalLogService {
@@ -16,27 +15,28 @@ export class SignalLogService {
     private configService: ConfigService<AppConfig>,
   ) {}
 
-  saveMAStrategyResultLog(params: {
-    user: UserEntity;
-    logData: SignalLogData;
-    isNotified: boolean;
-  }) {
-    const log = new SignalLogEntity();
-    log.user = params.user;
-    log.interval = params.logData.interval;
-    log.symbol = params.logData.symbol;
-    log.trend = params.logData.trend;
-    log.lastClosePrice = params.logData.lastClosePrice;
-    log.lastCloseAt = params.logData.lastCloseTime;
-    log.data = params.logData;
-    log.notified = params.isNotified;
-    return Promise.all([
-      this.checkAndSaveSystemSignalLog(log),
-      this.signalLogRepository.save(log),
-    ]);
+  async saveAppStartLogIfNotExists(log: SignalLogEntity) {
+    const existingLog = await this.signalLogRepository.findOne({
+      where: {
+        interval: log.interval,
+        symbol: log.symbol,
+        trend: log.trend,
+        lastClosePrice: log.lastClosePrice,
+        lastCloseAt: log.lastCloseAt,
+        triggerSource: SignalLogTriggerSource.AppStart,
+      },
+    });
+    if (existingLog) {
+      return;
+    }
+    return this.signalLogRepository.save(log);
   }
 
-  getLastSideway({
+  save(log: SignalLogEntity) {
+    return this.signalLogRepository.save(log);
+  }
+
+  getLastMASideway({
     interval,
     symbol,
   }: {
@@ -48,29 +48,35 @@ export class SignalLogService {
         user: IsNull(),
         interval,
         symbol,
-        trend: MarketTrend.Sideway,
+        maTrend: MarketTrend.Sideway,
       },
       order: { lastCloseAt: 'DESC' },
     });
   }
 
-  private async checkAndSaveSystemSignalLog(log: SignalLogEntity) {
+  async saveSystemLogIfNeeded(newScheduleLog: SignalLogEntity) {
     const lastSystemSignalLog = await this.signalLogRepository.findOne({
       where: {
-        symbol: log.symbol,
-        interval: log.interval,
-        type: SignalLogType.UpdateRealtime,
+        symbol: newScheduleLog.symbol,
+        interval: newScheduleLog.interval,
+        triggerSource: SignalLogTriggerSource.ScheduleJob,
         user: IsNull(),
       },
       order: {
         createdAt: 'DESC',
       },
     });
-    if (lastSystemSignalLog && lastSystemSignalLog.trend === log.trend) return;
-    const newLog = Object.assign(new SignalLogEntity(), log);
-    newLog.user = undefined;
-    newLog.notified = false;
-    return this.signalLogRepository.save(newLog);
+    if (
+      lastSystemSignalLog &&
+      lastSystemSignalLog.trend === newScheduleLog.trend
+    )
+      return;
+    const newSystemLog = new SignalLogEntity({
+      ...newScheduleLog,
+      user: undefined,
+      notified: false,
+    });
+    return this.signalLogRepository.save(newSystemLog);
   }
 
   getLatestUserLog(

@@ -2,7 +2,15 @@ import { CandleChartResult } from 'binance-api-node';
 import _ from 'lodash';
 import { rsi, wema } from 'technicalindicators';
 import { MarketTrend } from '../common/enums';
-import { Trend } from '../common/interface';
+import { StrategyResult, Trend } from '../common/interface';
+
+interface IndicatorParams {
+  closePrices: number[];
+  maResultList: number[][];
+  rsiResultList: number[];
+  lastClosePrice: number;
+  lastCloseTime: Date;
+}
 
 export class MAStrategy {
   private candles: CandleChartResult[];
@@ -21,34 +29,59 @@ export class MAStrategy {
     this.periods = periods;
   }
 
-  calculate() {
-    const closePrices = this.candles.map((item) => Number(item.close));
+  private getIndicatorParams(candles: CandleChartResult[]): IndicatorParams {
+    const closePrices = candles.map((item) => Number(item.close));
     const maResultList = this.periods.map((period) =>
       wema({ values: closePrices, period: period }),
     );
     const rsiResultList = rsi({ values: closePrices, period: 14 });
-
     const lastClosePrice = _.last(closePrices)!;
-    const trend = this.getMarketTrend(
+    const lastCloseTime = new Date(_.last(candles)!.closeTime);
+    return {
+      closePrices,
       maResultList,
       rsiResultList,
       lastClosePrice,
-    );
-    // const lastSideWayPrice =
-    //   trend !== MarketTrend.Sideway
-    //     ? this.lastSideWay(maResultList, trend.maTrend)
-    //     : undefined;
+      lastCloseTime,
+    };
+  }
 
-    const lastMA = maResultList.map((item) => _.last(item)!);
-    const lastRSI = _.last(rsiResultList)!;
-    const lastCloseTime = new Date(_.last(this.candles)!.closeTime);
+  calculate() {
+    const params = this.getIndicatorParams(this.candles);
+    return this.getStrategyResult(params);
+  }
+
+  calculateLastMASidewayPrice(
+    candles: CandleChartResult[] = [],
+    result?: StrategyResult,
+  ): StrategyResult | null {
+    if (!candles.length) return null;
+    if (result?.maTrend === MarketTrend.Sideway) return result;
+
+    const params = this.getIndicatorParams(candles);
+    const newResult = this.getStrategyResult(params);
+    return this.calculateLastMASidewayPrice(
+      candles.slice(0, candles.length - 1),
+      newResult,
+    );
+  }
+
+  private getStrategyResult(params: IndicatorParams): StrategyResult {
+    const trend = this.getMarketTrend(
+      params.maResultList,
+      params.rsiResultList,
+      params.lastClosePrice,
+    );
+
+    const lastMA = params.maResultList.map((item) => _.last(item)!);
+    const lastRSI = _.last(params.rsiResultList)!;
 
     return {
-      trend,
-      lastClosePrice,
-      lastCloseTime,
-      lastMA,
+      ...trend,
+      lastClosePrice: params.lastClosePrice,
+      lastCloseTime: params.lastCloseTime,
       lastRSI,
+      lastMA,
     };
   }
 
@@ -79,8 +112,6 @@ export class MAStrategy {
       lastOpenPrice > lastMAValues[0]
     )
       trend = MarketTrend.Bullish;
-    if (trend !== MarketTrend.Sideway) {
-    }
     return { trend, maTrend, rsiTrend };
   }
 
@@ -94,15 +125,5 @@ export class MAStrategy {
     if (Math.abs(maTrendValue) !== lastMAValues.length - 1)
       return MarketTrend.Sideway;
     return maTrendValue > 0 ? MarketTrend.Bullish : MarketTrend.Bearish;
-  }
-
-  private lastSideWay(maResultList: number[][], trend: MarketTrend) {
-    if (trend === MarketTrend.Sideway) {
-      const lastMAValues = maResultList.map((item) => _.last(item)!);
-      return lastMAValues[0];
-    }
-    const newList = maResultList.map((item) => item.slice(0, item.length - 1));
-    const lastMAValues = newList.map((item) => _.last(item)!);
-    return this.lastSideWay(newList, this.getMaTrend(lastMAValues));
   }
 }
