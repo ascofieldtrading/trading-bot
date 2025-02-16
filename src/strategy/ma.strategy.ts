@@ -51,7 +51,7 @@ export class MAStrategy {
     return this.getStrategyResult(params);
   }
 
-  calculateLastMASidewayPrice(
+  calculateLastMASideway(
     candles: CandleChartResult[] = [],
     result?: StrategyResult,
   ): StrategyResult | null {
@@ -60,7 +60,7 @@ export class MAStrategy {
 
     const params = this.getIndicatorParams(candles);
     const newResult = this.getStrategyResult(params);
-    return this.calculateLastMASidewayPrice(
+    return this.calculateLastMASideway(
       candles.slice(0, candles.length - 1),
       newResult,
     );

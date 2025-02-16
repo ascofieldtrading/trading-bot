@@ -59,11 +59,9 @@ export class SignalLogService {
       where: {
         symbol: newScheduleLog.symbol,
         interval: newScheduleLog.interval,
-        triggerSource: SignalLogTriggerSource.ScheduleJob,
-        user: IsNull(),
       },
       order: {
-        createdAt: 'DESC',
+        lastCloseAt: 'DESC',
       },
     });
     if (
@@ -73,10 +71,12 @@ export class SignalLogService {
       return;
     const newSystemLog = new SignalLogEntity({
       ...newScheduleLog,
+      triggerSource: SignalLogTriggerSource.ScheduleJob,
       user: undefined,
       notified: false,
     });
-    return this.signalLogRepository.save(newSystemLog);
+    const result = await this.signalLogRepository.save(newSystemLog);
+    return result;
   }
 
   getLatestUserLog(
@@ -90,7 +90,7 @@ export class SignalLogService {
         },
         ...where,
       },
-      order: { createdAt: 'DESC' },
+      order: { lastCloseAt: 'DESC' },
     });
   }
 }

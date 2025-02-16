@@ -73,8 +73,8 @@ export class NotificationService {
   private getMAMessageContent(data: MAStrategyResult): string[] {
     const getHeader = () => {
       const getTrendMessage = {
-        [MarketTrend.Bullish]: (msg) => `🟢 ${msg} 🟢 `,
-        [MarketTrend.Bearish]: (msg) => `🔴 ${msg} 🔴 `,
+        [MarketTrend.Bullish]: (msg) => `🟢 ${msg}`,
+        [MarketTrend.Bearish]: (msg) => `🔴 ${msg}`,
         [MarketTrend.Sideway]: (msg) => msg,
       };
       return getTrendMessage[data.trend](
@@ -122,16 +122,13 @@ export class NotificationService {
     return contentLines;
   }
 
-  private shouldNotifyUser(
-    newResult: MAStrategyResult,
-    old?: MAStrategyResult,
-  ) {
+  shouldNotifyUser(newResult: MAStrategyResult, old?: MAStrategyResult) {
     if (!old) return true;
     if (newResult.trend === old.trend) return false;
     if (newResult.maTrend !== old.maTrend) return true;
     if (
       newResult.trend !== MarketTrend.Sideway &&
-      old.maTrend === MarketTrend.Sideway
+      old.trend === MarketTrend.Sideway
     )
       return true;
 

@@ -47,7 +47,6 @@ import { UserModule } from './user/user.module';
             idleTimeoutMillis: 30000,
           },
         };
-        console.log('xxx', config);
         return config as any;
       },
     }),

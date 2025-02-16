@@ -40,6 +40,26 @@ export class TradingService implements OnModuleInit {
     });
   }
 
+  // @TimeMeasure()
+  // async fakeNotifyStatusForUser(user: UserEntity) {
+  //   const result = getMockSidewayStrategyResult();
+  //   const lastSignalLog = await this.signalLogService.getLatestUserLog(
+  //     user.telegramUserId,
+  //     {
+  //       interval: result.interval,
+  //       symbol: result.symbol,
+  //       notified: true,
+  //     },
+  //   );
+  //   if (!lastSignalLog) return;
+  //   const shouldNotify = this.notificationService.shouldNotifyUser(
+  //     result,
+  //     lastSignalLog.data,
+  //   );
+  //   if (!shouldNotify) return;
+  //   await this.notificationService.sendStatusToUser(user, result);
+  // }
+
   async onModuleInit() {
     await this.checkAndSaveLastSidewayLogs();
     this.initBotCommand();
@@ -59,16 +79,13 @@ export class TradingService implements OnModuleInit {
       onStart: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.enableUserNotification(user);
-        await this.botService.sendMultilineMessage(user.telegramChatId, [
-          'Started to receive the coin signals',
-        ]);
         await this.botService.sendUserConfigs(user);
       }),
       onStop: command(async (msg) => {
         const user = await this.userService.createUserIfNotExists(msg);
         await this.userService.disableUserNotification(user);
         await this.botService.sendMultilineMessage(user.telegramChatId, [
-          'Stopped to receive the coin signals',
+          'Stopped receiving coin signals',
         ]);
       }),
       onStatus: command(async (msg) => {
@@ -142,7 +159,7 @@ export class TradingService implements OnModuleInit {
             candles,
             periods: MA_PERIODS,
           });
-          const result = maStrategy.calculateLastMASidewayPrice(candles);
+          const result = maStrategy.calculateLastMASideway(candles);
           if (!result) return;
           const maResult: MAStrategyResult = {
             ...result,

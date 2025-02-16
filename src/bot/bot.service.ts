@@ -146,7 +146,8 @@ export class BotService {
 
   sendUserConfigs(user: UserEntity) {
     return this.sendMultilineMessage(user.telegramChatId, [
-      'Bellow are your configs',
+      'Receiving real-time coin signals with the following settings',
+      '',
       `Symbols: ${user.userConfig.symbols}`,
       `Intervals: ${user.userConfig.intervals}`,
     ]);
