@@ -50,7 +50,7 @@ export class SignalLogService {
         symbol,
         maTrend: MarketTrend.Sideway,
       },
-      order: { lastCloseAt: 'DESC' },
+      order: { lastCloseAt: 'DESC', createdAt: 'DESC' },
     });
   }
 
@@ -62,6 +62,7 @@ export class SignalLogService {
       },
       order: {
         lastCloseAt: 'DESC',
+        createdAt: 'DESC',
       },
     });
     if (
@@ -90,7 +91,7 @@ export class SignalLogService {
         },
         ...where,
       },
-      order: { lastCloseAt: 'DESC' },
+      order: { lastCloseAt: 'DESC', createdAt: 'DESC' },
     });
   }
 }
