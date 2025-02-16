@@ -2,15 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import _ from 'lodash';
 import TelegramBot, {
+  CallbackQuery,
   Message,
   SendMessageOptions,
 } from 'node-telegram-bot-api';
 import { AppConfig } from 'src/common/interface';
-import { Command } from '../common/enums';
+import { CallbackCommand, Command } from '../common/enums';
 import { Interval } from '../common/types';
 import { UserEntity } from '../user/entity/user.entity';
 
 type CommandFn = (msg: Message) => void;
+type CallbackCommandFn = (cbQuery: CallbackQuery) => Promise<void>;
 
 @Injectable()
 export class BotService {
@@ -29,57 +31,35 @@ export class BotService {
       },
     });
   }
+  listenCallback(callbackCommands: Record<CallbackCommand, CallbackCommandFn>) {
+    this.bot.on('callback_query', (callbackQuery) => {
+      const chatId = callbackQuery.message?.chat.id;
+      if (!chatId) return;
+      callbackCommands[callbackQuery.data as CallbackCommand]?.(callbackQuery);
+    });
+  }
 
-  listenCommands({
-    onStart,
-    onStop,
-    onStatus,
-    onUpdateSymbols,
-    onUpdateIntervals,
-    onResetConfig,
-  }: {
-    onStart: CommandFn;
-    onStop: CommandFn;
-    onStatus: CommandFn;
-    onUpdateSymbols: CommandFn;
-    onUpdateIntervals: CommandFn;
-    onResetConfig: CommandFn;
-  }) {
-    this.bot.setMyCommands([
-      {
-        command: Command.Start,
-        description: 'Start to receive coin signal',
-      },
-      {
-        command: Command.Stop,
-        description: 'Stop to receive coin signal',
-      },
-      {
-        command: Command.Status,
-        description: 'Show current status of the coins',
-      },
-      {
-        command: Command.SetSymbols,
-        description: 'Update coin symbols',
-      },
-      {
-        command: Command.SetIntervals,
-        description: 'Update interval',
-      },
-      {
-        command: Command.ResetConfig,
-        description: 'Reset config',
-      },
-    ]);
+  listenCommands(
+    commands: Record<Command, CommandFn>,
+    callbackCommands: Record<CallbackCommand, CallbackCommandFn>,
+  ) {
+    const commandDescriptions: Record<Command, string> = {
+      [Command.Start]: 'Start to receive coin signal',
+      [Command.Status]: 'Show current status of the coins',
+      [Command.Config]: 'Set Config',
+    };
+    this.bot.setMyCommands(
+      Object.entries(commandDescriptions).map(([command, description]) => ({
+        command,
+        description,
+      })),
+    );
 
-    const initCommand = (name: string, cb: CommandFn) =>
-      this.bot.onText(new RegExp(`\/${name}`), (msg) => cb(msg));
-    initCommand(Command.Start, onStart);
-    initCommand(Command.Stop, onStop);
-    initCommand(Command.Status, onStatus);
-    initCommand(Command.SetSymbols, onUpdateSymbols);
-    initCommand(Command.SetIntervals, onUpdateIntervals);
-    initCommand(Command.ResetConfig, onResetConfig);
+    Object.entries(commands).forEach(([command, cb]) => {
+      this.bot.onText(new RegExp(`\/${command}`), (msg) => cb(msg));
+    });
+
+    this.listenCallback(callbackCommands);
   }
 
   sendMessage(chatId: number, message: string, options?: SendMessageOptions) {
@@ -108,8 +88,6 @@ export class BotService {
     const prompt = await this.sendMultilineMessage(
       params.user.telegramChatId,
       [
-        `Enter your new ${params.name}`,
-        '',
         `Supported ${params.name}:`,
         ...params.allOptions.map((val) => `- ${val}`),
       ],
@@ -134,7 +112,6 @@ export class BotService {
           await this.sendMultilineMessage(params.user.telegramChatId, [
             `${_.upperFirst(params.name)} updated!`,
           ]);
-          await this.sendUserConfigs(params.user);
           return;
         }
         await this.sendMultilineMessage(params.user.telegramChatId, [
@@ -144,12 +121,48 @@ export class BotService {
     );
   }
 
+  editMessageReplyMarkup(user: UserEntity, messageId: number) {
+    return this.bot.editMessageReplyMarkup(this.getConfigReplyMarkup(user), {
+      chat_id: user.telegramChatId,
+      message_id: messageId,
+    });
+  }
+
   sendUserConfigs(user: UserEntity) {
-    return this.sendMultilineMessage(user.telegramChatId, [
-      'Receiving real-time coin signals with the following settings',
-      '',
-      `Symbols: ${user.userConfig.symbols}`,
-      `Intervals: ${user.userConfig.intervals}`,
-    ]);
+    return this.sendMessage(user.telegramChatId, '⚙️ *Config:*', {
+      parse_mode: 'Markdown',
+      reply_markup: this.getConfigReplyMarkup(user),
+    });
+  }
+
+  private getConfigReplyMarkup(user: UserEntity) {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: `🔔 Notifications: ${user.notificationEnabled ? 'Enabled' : 'Disabled'}`,
+            callback_data: CallbackCommand.SwitchNotification,
+          },
+        ],
+        [
+          {
+            text: `🪙 Symbols: ${user.userConfig.symbols}`,
+            callback_data: CallbackCommand.SetSymbols,
+          },
+        ],
+        [
+          {
+            text: `⏱️ Intervals: ${user.userConfig.intervals}`,
+            callback_data: CallbackCommand.SetIntervals,
+          },
+        ],
+        [
+          {
+            text: `🔄 Reset`,
+            callback_data: CallbackCommand.ResetConfig,
+          },
+        ],
+      ],
+    };
   }
 }

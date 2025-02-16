@@ -6,10 +6,13 @@ export enum MarketTrend {
 
 export enum Command {
   Start = 'start',
-  Stop = 'stop',
   Status = 'status',
+  Config = 'config',
+}
+export enum CallbackCommand {
   SetSymbols = 'set_symbols',
   SetIntervals = 'set_intervals',
+  SwitchNotification = 'switch_notification',
   ResetConfig = 'reset_config',
 }
 

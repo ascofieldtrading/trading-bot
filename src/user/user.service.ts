@@ -48,7 +48,7 @@ export class UserService {
 
   async createUserIfNotExists(message: Message) {
     const user = await this.userRepository.findOneBy({
-      telegramUserId: message.from!.id,
+      telegramChatId: message.chat!.id,
     });
 
     if (user) return user;
@@ -82,9 +82,9 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
-  async disableUserNotification(user: UserEntity) {
+  async switchNotification(user: UserEntity) {
     if (!user) return false;
-    user.notificationEnabled = false;
+    user.notificationEnabled = !user.notificationEnabled;
     await this.userRepository.save(user);
     return true;
   }
