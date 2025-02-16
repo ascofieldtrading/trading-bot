@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import _ from 'lodash';
-import moment from 'moment';
 import { BotService } from '../bot/bot.service';
 import { MarketTrend, SignalLogTriggerSource } from '../common/enums';
 import { MAStrategyResult } from '../common/interface';
@@ -8,6 +7,7 @@ import { SignalLogEntity } from '../signallog/entity/signalog.entity';
 import { SignalLogService } from '../signallog/signallog.service';
 import { UserEntity } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
+import { toVNTimzone } from '../util/date';
 
 @Injectable()
 export class NotificationService {
@@ -100,7 +100,7 @@ export class NotificationService {
     };
     const getLastSidewayLines = () => {
       if (!data.lastSideway) return '';
-      const date = moment(data.lastSideway.closeTime);
+      const date = toVNTimzone(data.lastSideway.closeTime.toISOString());
       const dateStr = `${date.fromNow()} (${date.format('DD/MM')} at ${date.format('HH:mm')})`;
       const trendIcon = data.trend === MarketTrend.Bullish ? '🔼' : '🔽';
       return [

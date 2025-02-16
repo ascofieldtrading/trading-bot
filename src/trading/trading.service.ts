@@ -14,6 +14,7 @@ import { TimeMeasure } from '../common/decorators';
 import { MarketTrend, SignalLogTriggerSource } from '../common/enums';
 import { AppConfig, MAStrategyResult } from '../common/interface';
 import { CoinSymbol, Interval } from '../common/types';
+import { getMockSidewayStrategyResult } from '../dummy';
 import { NotificationService } from '../notification/notification.service';
 import { SignalLogEntity } from '../signallog/entity/signalog.entity';
 import { SignalLogService } from '../signallog/signallog.service';
@@ -40,25 +41,25 @@ export class TradingService implements OnModuleInit {
     });
   }
 
-  // @TimeMeasure()
-  // async fakeNotifyStatusForUser(user: UserEntity) {
-  //   const result = getMockSidewayStrategyResult();
-  //   const lastSignalLog = await this.signalLogService.getLatestUserLog(
-  //     user.telegramUserId,
-  //     {
-  //       interval: result.interval,
-  //       symbol: result.symbol,
-  //       notified: true,
-  //     },
-  //   );
-  //   if (!lastSignalLog) return;
-  //   const shouldNotify = this.notificationService.shouldNotifyUser(
-  //     result,
-  //     lastSignalLog.data,
-  //   );
-  //   if (!shouldNotify) return;
-  //   await this.notificationService.sendStatusToUser(user, result);
-  // }
+  @TimeMeasure()
+  async fakeNotifyStatusForUser(user: UserEntity) {
+    const result = getMockSidewayStrategyResult();
+    const lastSignalLog = await this.signalLogService.getLatestUserLog(
+      user.telegramUserId,
+      {
+        interval: result.interval,
+        symbol: result.symbol,
+        notified: true,
+      },
+    );
+    if (!lastSignalLog) return;
+    const shouldNotify = this.notificationService.shouldNotifyUser(
+      result,
+      lastSignalLog.data,
+    );
+    if (!shouldNotify) return;
+    await this.notificationService.sendStatusToUser(user, result);
+  }
 
   async onModuleInit() {
     await this.checkAndSaveLastSidewayLogs();
