@@ -3,13 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import Binance, { CandlesOptions } from 'binance-api-node';
 import { CronJob } from 'cron';
+import _ from 'lodash';
 import { CallbackQuery, Message } from 'node-telegram-bot-api';
 import { BotService } from '../bot/bot.service';
-import {
-  MA_PERIODS,
-  NEW_USER_DEFAULT_INTERVALS,
-  NEW_USER_DEFAULT_SYMBOLS,
-} from '../common/constant';
+import { MA_PERIODS } from '../common/constant';
 import { TimeMeasure } from '../common/decorators';
 import {
   CallbackCommand,
@@ -29,6 +26,11 @@ import { UserService } from '../user/user.service';
 
 @Injectable()
 export class TradingService implements OnModuleInit {
+  userSelections: Record<
+    number,
+    Partial<Record<CallbackCommand, Set<string>>>
+  > = {}; // Store user selections
+
   private readonly logger = new Logger(TradingService.name);
   private client: import('binance-api-node').Binance;
 
@@ -83,90 +85,122 @@ export class TradingService implements OnModuleInit {
         });
     const callbackCommand =
       (cb: (cbQuery: CallbackQuery) => Promise<void>) =>
-      async (callbackQuery: CallbackQuery) =>
-        cb(callbackQuery).catch(async (e) => {
-          if (!callbackQuery.message) return;
+      async (callbackQuery: CallbackQuery) => {
+        if (!callbackQuery.message) return;
+        cb.bind(this, callbackQuery)().catch(async (e) => {
+          if (!callbackQuery.message || !callbackQuery.data) return;
           this.logger.error(`Failed to resolve user command. Error ${e}`);
           this.notificationService.sendErrorMessage(
             callbackQuery.message?.chat.id,
           );
         });
-    this.botService.listenCommands(
+      };
+    this.botService.initBotCommands(
       {
-        [Command.Start]: command(async (msg: Message) => {
-          const user = await this.userService.createUserIfNotExists(msg);
-          await this.userService.enableUserNotification(user);
-          await this.botService.sendUserConfigs(user);
-        }),
-        [Command.Status]: command(async (msg: Message) => {
-          const user = await this.userService.createUserIfNotExists(msg);
-          await this.notifyStatusForUser(user);
-        }),
-        [Command.Config]: command(async (msg: Message) => {
-          const user = await this.userService.createUserIfNotExists(msg);
-          this.botService.sendUserConfigs(user);
-        }),
+        [Command.Start]: {
+          description: 'Start to receive coin signal',
+          cb: command(async (msg) => {
+            const user = await this.userService.createUserIfNotExists(msg);
+            await this.userService.enableUserNotification(user);
+            await this.botService.sendUserConfigs(user);
+          }),
+        },
+        [Command.Status]: {
+          description: 'Show current status of the coins',
+          cb: command(async (msg) => {
+            const user = await this.userService.createUserIfNotExists(msg);
+            await this.notifyStatusForUser(user);
+          }),
+        },
+        [Command.Config]: {
+          description: 'Show config',
+          cb: command(async (msg) => {
+            const user = await this.userService.createUserIfNotExists(msg);
+            delete this.userSelections[user.telegramChatId];
+            this.botService.sendUserConfigs(user);
+          }),
+        },
       },
       {
-        [CallbackCommand.SetIntervals]: callbackCommand(
+        [CallbackCommand.SetIntervals]: callbackCommand(async (cbQuery) => {
+          const msg = cbQuery.message!;
+          const user = await this.userService.createUserIfNotExists(msg);
+          this.botService.updateUserConfig({
+            cbQuery,
+            user,
+            callbackCommand: CallbackCommand.SetIntervals,
+            userSelections: this.userSelections,
+            allOptions: this.configService
+              .get('intervals')!
+              .map((value) => ({ value, label: value })),
+            defaultValues: user.userConfig.intervals.split(','),
+            onUpdate: async () => {
+              user.userConfig.intervals = Array.from(
+                this.userSelections[user.telegramChatId][
+                  CallbackCommand.SetIntervals
+                ]!,
+              ).join(',');
+              await this.userService.update(user);
+            },
+          });
+        }),
+        [CallbackCommand.SetSymbols]: callbackCommand(
           async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message;
-            if (!msg) return;
+            const msg = cbQuery.message!;
             const user = await this.userService.createUserIfNotExists(msg);
-            await this.botService.updateUserFieldConfig({
-              name: 'intervals',
-              msg: msg,
+            this.botService.updateUserConfig({
+              cbQuery,
               user,
-              allOptions: this.configService.get('intervals')!,
-              onUpdate: async (options) => {
-                user.userConfig.intervals = options.join(',');
+              callbackCommand: CallbackCommand.SetSymbols,
+              userSelections: this.userSelections,
+              allOptions: this.configService
+                .get('symbols')!
+                .map((value) => ({ value, label: value })),
+              defaultValues: user.userConfig.symbols.split(','),
+              onUpdate: async () => {
+                user.userConfig.symbols = Array.from(
+                  this.userSelections[user.telegramChatId][
+                    CallbackCommand.SetSymbols
+                  ]!,
+                ).join(',');
                 await this.userService.update(user);
-                this.botService.editMessageReplyMarkup(user, msg.message_id);
               },
             });
           },
         ),
-        [CallbackCommand.SetSymbols]: callbackCommand(
+        [CallbackCommand.LookingForTrend]: callbackCommand(
           async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message;
-            if (!msg) return;
+            const msg = cbQuery.message!;
             const user = await this.userService.createUserIfNotExists(msg);
-            await this.botService.updateUserFieldConfig({
-              name: 'symbols',
-              msg,
+            this.botService.updateUserConfig({
+              cbQuery,
               user,
-              allOptions: this.configService.get('symbols')!,
-              onUpdate: async (options) => {
-                user.userConfig.symbols = options.join(',');
+              callbackCommand: CallbackCommand.LookingForTrend,
+              userSelections: this.userSelections,
+              allOptions: Object.values(MarketTrend).map((value) => ({
+                value,
+                label: _.upperFirst(value),
+              })),
+              defaultValues:
+                user.userConfig.lookingForTrend?.split(',') ??
+                Object.values(MarketTrend),
+              onUpdate: async () => {
+                user.userConfig.lookingForTrend = Array.from(
+                  this.userSelections[user.telegramChatId][
+                    CallbackCommand.LookingForTrend
+                  ]!,
+                ).join(',');
                 await this.userService.update(user);
-                this.botService.editMessageReplyMarkup(user, msg.message_id);
               },
             });
           },
         ),
         [CallbackCommand.SwitchNotification]: callbackCommand(
           async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message;
-            if (!msg) return;
+            const msg = cbQuery.message!;
             const user = await this.userService.createUserIfNotExists(msg);
             await this.userService.switchNotification(user);
-            this.botService.editMessageReplyMarkup(user, msg.message_id);
-          },
-        ),
-        [CallbackCommand.ResetConfig]: callbackCommand(
-          async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message;
-            if (!msg) return;
-            const user = await this.userService.createUserIfNotExists(msg);
-            user.userConfig.symbols = NEW_USER_DEFAULT_SYMBOLS.join(',');
-            user.userConfig.intervals = NEW_USER_DEFAULT_INTERVALS.join(',');
-            await this.userService.update(user);
-            await this.botService.sendMultilineMessage(user.telegramChatId, [
-              'Config reset!',
-            ]);
-            await this.botService
-              .editMessageReplyMarkup(user, msg.message_id)
-              .catch(() => {});
+            this.botService.editUserConfigReplyMarkup(user, msg.message_id);
           },
         ),
       },

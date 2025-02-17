@@ -13,10 +13,14 @@ export enum CallbackCommand {
   SetSymbols = 'set_symbols',
   SetIntervals = 'set_intervals',
   SwitchNotification = 'switch_notification',
-  ResetConfig = 'reset_config',
+  LookingForTrend = 'looking_for_trend',
 }
 
 export enum SignalLogTriggerSource {
   ScheduleJob = 'schedule_job',
   AppStart = 'app_start',
+}
+
+export enum ConfirmCommand {
+  OK = 'OK',
 }

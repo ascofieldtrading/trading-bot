@@ -19,6 +19,9 @@ export class UserConfigEntity {
   @JoinColumn()
   user: UserEntity;
 
+  @Column({ nullable: true })
+  lookingForTrend?: string;
+
   @Column()
   symbols: string;
 

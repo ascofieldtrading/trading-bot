@@ -33,7 +33,11 @@ export class NotificationService {
           notified: true,
         },
       );
-      const shouldNotify = this.shouldNotifyUser(data, lastSignalLog?.data);
+      const shouldNotify = this.shouldNotifyUser(
+        data,
+        lastSignalLog?.data,
+        user.userConfig.lookingForTrend?.split(',') as MarketTrend[],
+      );
       const userText = `user (telegramUserId=${user.telegramUserId})`;
       if (shouldNotify) {
         await this.sendStatusToUser(user, data);
@@ -122,7 +126,13 @@ export class NotificationService {
     return contentLines;
   }
 
-  shouldNotifyUser(newResult: MAStrategyResult, old?: MAStrategyResult) {
+  shouldNotifyUser(
+    newResult: MAStrategyResult,
+    old?: MAStrategyResult,
+    lookingForTrend?: MarketTrend[],
+  ) {
+    if (lookingForTrend && lookingForTrend.includes(newResult.trend))
+      return false;
     if (!old) return true;
     if (newResult.trend === old.trend) return false;
     if (newResult.maTrend !== old.maTrend) return true;
@@ -142,6 +152,7 @@ export class NotificationService {
       newResult.lastClosePrice <= newResult.lastMA[1]
     )
       return true;
+
     return false;
   }
 

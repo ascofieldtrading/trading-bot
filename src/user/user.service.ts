@@ -7,6 +7,7 @@ import {
   NEW_USER_DEFAULT_INTERVALS,
   NEW_USER_DEFAULT_SYMBOLS,
 } from '../common/constant';
+import { MarketTrend } from '../common/enums';
 import { AppConfig } from '../common/interface';
 import { UserEntity } from './entity/user.entity';
 import { UserConfigEntity } from './entity/userconfig.entity';
@@ -79,6 +80,14 @@ export class UserService {
 
   async enableUserNotification(user: UserEntity): Promise<UserEntity> {
     user.notificationEnabled = true;
+    return this.userRepository.save(user);
+  }
+
+  async updateLookingForTrend(
+    user: UserEntity,
+    trend?: MarketTrend,
+  ): Promise<UserEntity> {
+    user.userConfig.lookingForTrend = trend;
     return this.userRepository.save(user);
   }
 
