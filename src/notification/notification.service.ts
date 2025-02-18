@@ -131,7 +131,7 @@ export class NotificationService {
     old?: MAStrategyResult,
     lookingForTrend?: MarketTrend[],
   ) {
-    if (lookingForTrend && lookingForTrend.includes(newResult.trend))
+    if (lookingForTrend && !lookingForTrend.includes(newResult.trend))
       return false;
     if (!old) return true;
     if (newResult.trend === old.trend) return false;
