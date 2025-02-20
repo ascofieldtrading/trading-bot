@@ -7,7 +7,6 @@ export enum MarketTrend {
 export enum Command {
   Start = 'start',
   Status = 'status',
-  Config = 'config',
 }
 export enum CallbackCommand {
   SetSymbols = 'set_symbols',

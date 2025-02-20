@@ -28,6 +28,12 @@ export class UserConfigEntity {
   @Column()
   intervals: string;
 
+  @Column({ nullable: true })
+  apiKey: string;
+
+  @Column({ nullable: true })
+  secretKey: string;
+
   @CreatedAtColumn()
   createdAt: Date;
 

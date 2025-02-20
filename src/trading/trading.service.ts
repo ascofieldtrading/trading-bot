@@ -106,18 +106,10 @@ export class TradingService implements OnModuleInit {
           }),
         },
         [Command.Status]: {
-          description: 'Show current status of the coins',
+          description: 'Show status',
           cb: command(async (msg) => {
             const user = await this.userService.createUserIfNotExists(msg);
             await this.notifyStatusForUser(user);
-          }),
-        },
-        [Command.Config]: {
-          description: 'Show config',
-          cb: command(async (msg) => {
-            const user = await this.userService.createUserIfNotExists(msg);
-            delete this.userSelections[user.telegramChatId];
-            this.botService.sendUserConfigs(user);
           }),
         },
       },
