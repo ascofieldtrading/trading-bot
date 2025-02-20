@@ -86,9 +86,8 @@ export class SignalService implements OnModuleInit {
     // return;
     await this.checkAndSaveLastSidewayLogs();
     this.initBotCommand();
-    this.initCheckSignalScheduleJob(
-      this.configService.get('scheduledCronValue')!,
-    );
+    this.initCheckAndSaveLastSidewayLogs('0 * * * *');
+    this.initPollingSignalJob(this.configService.get('scheduledCronValue')!);
   }
 
   private initBotCommand() {
@@ -223,16 +222,33 @@ export class SignalService implements OnModuleInit {
   }
 
   @TimeMeasure()
-  private initCheckSignalScheduleJob(cronValue: string) {
+  private initCheckAndSaveLastSidewayLogs(cronValue: string) {
+    this.logger.verbose(
+      `Init check and save last side way - using cron schedule: ${cronValue}`,
+      `Symbols: ${this.configService.get('symbols')}`,
+      `Intervals: ${this.configService.get('intervals')}`,
+    );
+
+    const job = new CronJob(
+      cronValue,
+      this.checkAndSaveLastSidewayLogs.bind(this),
+    );
+
+    this.schedulerRegistry.addCronJob('checkAndSaveLastSidewayJob', job);
+    job.start();
+  }
+
+  @TimeMeasure()
+  private initPollingSignalJob(cronValue: string) {
     this.logger.verbose(
       `Init schedule check and notify - using cron schedule: ${cronValue}`,
       `Symbols: ${this.configService.get('symbols')}`,
       `Intervals: ${this.configService.get('intervals')}`,
     );
 
-    const job = new CronJob(cronValue, this.checkAndNotifyStatus.bind(this));
+    const job = new CronJob(cronValue, this.pollingStatus.bind(this));
 
-    this.schedulerRegistry.addCronJob('dynamicJob', job);
+    this.schedulerRegistry.addCronJob('pollingStatusJob', job);
     job.start();
   }
 
@@ -294,7 +310,7 @@ export class SignalService implements OnModuleInit {
   }
 
   @TimeMeasure()
-  private async checkAndNotifyStatus() {
+  private async pollingStatus() {
     const promiseList = this.configService
       .get<CoinSymbol[]>('symbols')!
       .map((symbol) =>
