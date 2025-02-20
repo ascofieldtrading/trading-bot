@@ -33,11 +33,13 @@ export class NotificationService {
           notified: true,
         },
       );
-      const shouldNotify = this.shouldNotifyUser(
-        data,
-        lastSignalLog?.data,
-        user.userConfig.lookingForTrend?.split(',') as MarketTrend[],
-      );
+      const shouldNotify =
+        user.userConfig.pollingSignal ||
+        this.shouldNotifyUser(
+          data,
+          lastSignalLog?.data,
+          user.userConfig.lookingForTrend?.split(',') as MarketTrend[],
+        );
       const userText = `user (telegramUserId=${user.telegramUserId})`;
       if (shouldNotify) {
         await this.sendStatusToUser(user, data);
@@ -49,6 +51,8 @@ export class NotificationService {
       }
     });
   }
+
+  handleAutoPlaceOrder() {}
 
   public async sendStatusToUser(user: UserEntity, data: MAStrategyResult) {
     const content = this.getMAMessageContent(data);

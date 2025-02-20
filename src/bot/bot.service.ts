@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CronExpressionParser } from 'cron-parser';
 import _ from 'lodash';
 import TelegramBot, {
   CallbackQuery,
@@ -261,6 +262,10 @@ export class BotService {
   }
 
   private getConfigReplyMarkup(user: UserEntity) {
+    const interval = CronExpressionParser.parse(
+      this.configService.get('scheduledCronValue')!,
+    );
+    const [first, second] = interval.take(2);
     return {
       inline_keyboard: [
         [
@@ -291,6 +296,12 @@ export class BotService {
                 : _.upperFirst(user.userConfig.lookingForTrend)
             }`,
             callback_data: CallbackCommand.LookingForTrend,
+          },
+        ],
+        [
+          {
+            text: `⚡Polling signal: ${user.userConfig.pollingSignal ? `Every ${(second.getTime() - first.getTime()) / 1000}s` : 'Disabled'}`,
+            callback_data: CallbackCommand.SwitchPollingSignal,
           },
         ],
       ],

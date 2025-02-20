@@ -8,11 +8,13 @@ export enum Command {
   Start = 'start',
   Status = 'status',
 }
+
 export enum CallbackCommand {
   SetSymbols = 'set_symbols',
   SetIntervals = 'set_intervals',
   SwitchNotification = 'switch_notification',
   LookingForTrend = 'looking_for_trend',
+  SwitchPollingSignal = 'switch_polling_signal',
 }
 
 export enum SignalLogTriggerSource {
@@ -22,4 +24,9 @@ export enum SignalLogTriggerSource {
 
 export enum ConfirmCommand {
   OK = 'OK',
+}
+
+export enum OrderSide {
+  Long = 'long',
+  Short = 'short',
 }

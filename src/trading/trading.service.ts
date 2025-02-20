@@ -1,334 +1,135 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { SchedulerRegistry } from '@nestjs/schedule';
-import Binance, { CandlesOptions } from 'binance-api-node';
-import { CronJob } from 'cron';
-import _ from 'lodash';
-import { CallbackQuery, Message } from 'node-telegram-bot-api';
-import { BotService } from '../bot/bot.service';
-import { MA_PERIODS } from '../common/constant';
+import { Injectable, Logger } from '@nestjs/common';
 import { TimeMeasure } from '../common/decorators';
-import {
-  CallbackCommand,
-  Command,
-  MarketTrend,
-  SignalLogTriggerSource,
-} from '../common/enums';
-import { AppConfig, MAStrategyResult } from '../common/interface';
-import { CoinSymbol, Interval } from '../common/types';
-import { getMockSidewayStrategyResult } from '../dummy';
-import { NotificationService } from '../notification/notification.service';
-import { SignalLogEntity } from '../signallog/entity/signalog.entity';
-import { SignalLogService } from '../signallog/signallog.service';
-import { MAStrategy } from '../strategy/ma.strategy';
 import { UserEntity } from '../user/entity/user.entity';
-import { UserService } from '../user/user.service';
+
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+import CryptoJS from 'crypto-js';
+import { OrderSide } from '../common/enums';
+import { AppConfig, BingXConfig } from '../common/interface';
+import { CoinSymbol } from '../common/types';
+
+interface PlaceOrder {
+  user: UserEntity;
+  symbol: CoinSymbol;
+  price: number;
+  margin: number;
+  side: OrderSide;
+  leverage?: number;
+}
 
 @Injectable()
-export class TradingService implements OnModuleInit {
-  userSelections: Record<
-    number,
-    Partial<Record<CallbackCommand, Set<string>>>
-  > = {}; // Store user selections
-
+export class TradingService {
   private readonly logger = new Logger(TradingService.name);
-  private client: import('binance-api-node').Binance;
-
-  constructor(
-    private configService: ConfigService<AppConfig>,
-    private readonly schedulerRegistry: SchedulerRegistry,
-    private readonly notificationService: NotificationService,
-    private readonly botService: BotService,
-    private readonly userService: UserService,
-    private readonly signalLogService: SignalLogService,
-  ) {
-    this.client = Binance({
-      apiKey: configService.get('binanceApiKey'),
-      apiSecret: configService.get('binanceSecretKey'),
-    });
-  }
+  constructor(private readonly configService: ConfigService<AppConfig>) {}
 
   @TimeMeasure()
-  async fakeNotifyStatusForUser(user: UserEntity) {
-    const result = getMockSidewayStrategyResult();
-    const lastSignalLog = await this.signalLogService.getLatestUserLog(
-      user.telegramUserId,
-      {
-        interval: result.interval,
-        symbol: result.symbol,
-        notified: true,
-      },
-    );
-    if (!lastSignalLog) return;
-    const shouldNotify = this.notificationService.shouldNotifyUser(
-      result,
-      lastSignalLog.data,
-    );
-    if (!shouldNotify) return;
-    await this.notificationService.sendStatusToUser(user, result);
-  }
+  async placeTestOrder({
+    user,
+    symbol,
+    price,
+    margin,
+    side,
+    leverage,
+  }: PlaceOrder) {
+    if (!user.userConfig.apiKey || !user.userConfig.secretKey) {
+      this.logger.verbose('Skip placeTestOrder since api keys are invalid!');
+      return;
+    }
+    const coin = this.getBingxSymbol(symbol);
 
-  async onModuleInit() {
-    await this.checkAndSaveLastSidewayLogs();
-    this.initBotCommand();
-    this.initCheckSignalScheduleJob(
-      this.configService.get('scheduledCronValue')!,
+    await this.apiPlaceTestOrder(
+      user.userConfig.apiKey,
+      user.userConfig.secretKey,
+      coin,
+      price,
+      margin,
+      side,
+      leverage,
     );
   }
 
-  private initBotCommand() {
-    const command =
-      (cb: (msg: Message) => Promise<void>) => async (message: Message) =>
-        cb(message).catch(async (e) => {
-          this.logger.error(`Failed to resolve user command. Error ${e}`);
-          this.notificationService.sendErrorMessage(message.chat.id);
-        });
-    const callbackCommand =
-      (cb: (cbQuery: CallbackQuery) => Promise<void>) =>
-      async (callbackQuery: CallbackQuery) => {
-        if (!callbackQuery.message) return;
-        cb.bind(this, callbackQuery)().catch(async (e) => {
-          if (!callbackQuery.message || !callbackQuery.data) return;
-          this.logger.error(`Failed to resolve user command. Error ${e}`);
-          this.notificationService.sendErrorMessage(
-            callbackQuery.message?.chat.id,
-          );
-        });
-      };
-    this.botService.initBotCommands(
-      {
-        [Command.Start]: {
-          description: 'Start to receive coin signal',
-          cb: command(async (msg) => {
-            const user = await this.userService.createUserIfNotExists(msg);
-            await this.userService.enableUserNotification(user);
-            await this.botService.sendUserConfigs(user);
-          }),
-        },
-        [Command.Status]: {
-          description: 'Show status',
-          cb: command(async (msg) => {
-            const user = await this.userService.createUserIfNotExists(msg);
-            await this.notifyStatusForUser(user);
-          }),
-        },
-      },
-      {
-        [CallbackCommand.SetIntervals]: callbackCommand(async (cbQuery) => {
-          const msg = cbQuery.message!;
-          const user = await this.userService.createUserIfNotExists(msg);
-          this.botService.updateUserConfig({
-            cbQuery,
-            user,
-            callbackCommand: CallbackCommand.SetIntervals,
-            userSelections: this.userSelections,
-            allOptions: this.configService
-              .get('intervals')!
-              .map((value) => ({ value, label: value })),
-            defaultValues: user.userConfig.intervals.split(','),
-            onUpdate: async () => {
-              user.userConfig.intervals = Array.from(
-                this.userSelections[user.telegramChatId][
-                  CallbackCommand.SetIntervals
-                ]!,
-              ).join(',');
-              await this.userService.update(user);
-            },
-          });
-        }),
-        [CallbackCommand.SetSymbols]: callbackCommand(
-          async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message!;
-            const user = await this.userService.createUserIfNotExists(msg);
-            this.botService.updateUserConfig({
-              cbQuery,
-              user,
-              callbackCommand: CallbackCommand.SetSymbols,
-              userSelections: this.userSelections,
-              allOptions: this.configService
-                .get('symbols')!
-                .map((value) => ({ value, label: value })),
-              defaultValues: user.userConfig.symbols.split(','),
-              onUpdate: async () => {
-                user.userConfig.symbols = Array.from(
-                  this.userSelections[user.telegramChatId][
-                    CallbackCommand.SetSymbols
-                  ]!,
-                ).join(',');
-                await this.userService.update(user);
-              },
-            });
-          },
-        ),
-        [CallbackCommand.LookingForTrend]: callbackCommand(
-          async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message!;
-            const user = await this.userService.createUserIfNotExists(msg);
-            this.botService.updateUserConfig({
-              cbQuery,
-              user,
-              callbackCommand: CallbackCommand.LookingForTrend,
-              userSelections: this.userSelections,
-              allOptions: Object.values(MarketTrend).map((value) => ({
-                value,
-                label: _.upperFirst(value),
-              })),
-              defaultValues:
-                user.userConfig.lookingForTrend?.split(',') ??
-                Object.values(MarketTrend),
-              onUpdate: async () => {
-                user.userConfig.lookingForTrend = Array.from(
-                  this.userSelections[user.telegramChatId][
-                    CallbackCommand.LookingForTrend
-                  ]!,
-                ).join(',');
-                await this.userService.update(user);
-              },
-            });
-          },
-        ),
-        [CallbackCommand.SwitchNotification]: callbackCommand(
-          async (cbQuery: CallbackQuery) => {
-            const msg = cbQuery.message!;
-            const user = await this.userService.createUserIfNotExists(msg);
-            await this.userService.switchNotification(user);
-            this.botService.editUserConfigReplyMarkup(user, msg.message_id);
-          },
-        ),
-      },
-    );
+  private getBingxSymbol(symbol: CoinSymbol) {
+    return `${symbol.replace('USDT', '')}-USDT`;
   }
 
-  @TimeMeasure()
-  private initCheckSignalScheduleJob(cronValue: string) {
-    this.logger.verbose(
-      `Init schedule check and notify - using cron schedule: ${cronValue}`,
-      `Symbols: ${this.configService.get('symbols')}`,
-      `Intervals: ${this.configService.get('intervals')}`,
-    );
-
-    const job = new CronJob(cronValue, this.checkAndNotifyStatus.bind(this));
-
-    this.schedulerRegistry.addCronJob('dynamicJob', job);
-    job.start();
-  }
-
-  @TimeMeasure()
-  async checkAndSaveLastSidewayLogs() {
-    this.configService.get('symbols').forEach((symbol) => {
-      this.configService.get('intervals').forEach(async (interval) => {
-        try {
-          const candles = await this.getCandles({
-            symbol,
-            interval,
-            limit: this.configService.get('fetchPriceLimit'),
-          });
-          const maStrategy = new MAStrategy({
-            candles,
-            periods: MA_PERIODS,
-          });
-          const result = maStrategy.calculateLastMASideway(candles);
-          if (!result) return;
-          const maResult: MAStrategyResult = {
-            ...result,
-            symbol,
-            interval,
-          };
-
-          const log = new SignalLogEntity({
-            interval: maResult.interval,
-            symbol: maResult.symbol,
-            trend: maResult.trend,
-            maTrend: maResult.maTrend,
-            lastClosePrice: maResult.lastClosePrice,
-            lastCloseAt: maResult.lastCloseTime,
-            triggerSource: SignalLogTriggerSource.AppStart,
-            data: maResult,
-          });
-
-          await this.signalLogService.saveAppStartLogIfNotExists(log);
-        } catch (e) {
-          this.logger.error(
-            `${symbol} ${interval}`,
-            `Failed to update last sideway. Error ${e}`,
-          );
-        }
-      });
-    });
-  }
-
-  @TimeMeasure()
-  async notifyStatusForUser(user: UserEntity) {
-    for (const symbol of user.userConfig.symbols.split(',')) {
-      for (const interval of user.userConfig.intervals.split(',')) {
-        const result = await this.getMAStrategyResult({
-          symbol,
-          interval: interval as Interval,
-        });
-        await this.notificationService.sendStatusToUser(user, result);
+  private getParameters(API, timestamp, urlEncode?: boolean) {
+    let parameters = '';
+    for (const key in API.payload) {
+      if (urlEncode) {
+        parameters += key + '=' + encodeURIComponent(API.payload[key]) + '&';
+      } else {
+        parameters += key + '=' + API.payload[key] + '&';
       }
     }
+    if (parameters) {
+      parameters = parameters.substring(0, parameters.length - 1);
+      parameters = parameters + '&timestamp=' + timestamp;
+    } else {
+      parameters = 'timestamp=' + timestamp;
+    }
+    return parameters;
   }
 
-  @TimeMeasure()
-  private async checkAndNotifyStatus() {
-    const promiseList = this.configService
-      .get<CoinSymbol[]>('symbols')!
-      .map((symbol) =>
-        this.configService
-          .get<Interval[]>('intervals')!
-          .map(async (interval) => {
-            try {
-              const result = await this.getMAStrategyResult({
-                symbol,
-                interval,
-              });
-              await this.notificationService.sendStatusToUsers(result);
-            } catch (e) {
-              this.logger.error(
-                `${symbol} ${interval}`,
-                `Failed to check and notify symbol status. Error ${e}`,
-              );
-            }
-          }),
-      );
-    await Promise.all(promiseList.flat());
-  }
-
-  private async getMAStrategyResult(candleOptions: CandlesOptions) {
-    const candles = await this.getCandles({
-      ...candleOptions,
-      limit: this.configService.get('fetchPriceLimit'),
-    });
-    const maStrategy = new MAStrategy({
-      candles,
-      periods: [21, 50, 200],
-    });
-    const strategyResult = maStrategy.calculate();
-
-    const result: MAStrategyResult = {
-      symbol: candleOptions.symbol as CoinSymbol,
-      interval: candleOptions.interval,
-      ...strategyResult,
+  private async apiPlaceTestOrder(
+    apiKey: string,
+    secretKey: string,
+    coin: string,
+    price: number,
+    margin: number,
+    side: OrderSide,
+    leverage = 1,
+  ) {
+    const totalMargin = margin * leverage;
+    const qty = totalMargin / price;
+    const stopLossPrice = price - (margin * 0.1) / qty;
+    const takeProfitPrice = price + (margin * 0.2) / qty;
+    const API = {
+      uri: '/openApi/swap/v2/trade/order',
+      method: 'POST',
+      payload: {
+        symbol: coin,
+        side: 'BUY',
+        positionSide: `${side.toUpperCase()}`,
+        type: 'MARKET',
+        quantity: qty,
+        takeProfit: `{"type": "TAKE_PROFIT_MARKET", "stopPrice": ${takeProfitPrice},"workingType":"MARK_PRICE"}`,
+        stopLoss: `{"type": "STOP_MARKET", "stopPrice": ${stopLossPrice},"workingType":"MARK_PRICE"}`,
+      },
+      protocol: 'https',
     };
 
-    if (result.trend !== MarketTrend.Sideway) {
-      const sidewayLog = await this.signalLogService.getLastMASideway({
-        interval: candleOptions.interval,
-        symbol: candleOptions.symbol as CoinSymbol,
-      });
-      if (sidewayLog) {
-        result.lastSideway = {
-          close: sidewayLog.lastClosePrice,
-          closeTime: sidewayLog.lastCloseAt,
-        };
-      }
+    const protocol = API.protocol;
+    const path = API.uri;
+    const method = API.method;
+    const timestamp = new Date().getTime();
+    const sign = CryptoJS.enc.Hex.stringify(
+      CryptoJS.HmacSHA256(this.getParameters(API, timestamp), secretKey),
+    );
+    const url =
+      protocol +
+      '://' +
+      this.configService.get<BingXConfig>('bingx')?.testHost +
+      path +
+      '?' +
+      this.getParameters(API, timestamp, true) +
+      '&signature=' +
+      sign;
+    const config = {
+      method: method,
+      url: url,
+      headers: {
+        'X-BX-APIKEY': apiKey,
+      },
+      transformResponse: (resp) => {
+        this.logger.verbose('Placed order successfully', resp);
+        return resp;
+      },
+    };
+    try {
+      return await axios(config);
+    } catch (e) {
+      this.logger.error(`Failed to place order. Error ${e}`);
     }
-
-    return result;
-  }
-
-  private getCandles(candleOptions: CandlesOptions) {
-    return this.client.candles(candleOptions);
   }
 }

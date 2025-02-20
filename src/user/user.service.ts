@@ -91,6 +91,13 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
+  async switchPollingSignal(user: UserEntity) {
+    if (!user) return false;
+    user.userConfig.pollingSignal = !user.userConfig.pollingSignal;
+    await this.userRepository.save(user);
+    return true;
+  }
+
   async switchNotification(user: UserEntity) {
     if (!user) return false;
     user.notificationEnabled = !user.notificationEnabled;

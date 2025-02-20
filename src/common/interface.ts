@@ -10,8 +10,14 @@ export interface DatabaseConfig {
   password: string;
 }
 
+export interface BingXConfig {
+  testHost: string;
+  host: string;
+}
+
 export interface AppConfig {
   env: ENV;
+  bingx: BingXConfig;
   binanceApiKey: string;
   binanceSecretKey: string;
   telegramBotToken: string;

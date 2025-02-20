@@ -7,12 +7,13 @@ import { AppService } from './app.service';
 import { BotModule } from './bot/bot.module';
 import { AppConfig, DatabaseConfig, ENV } from './common/interface';
 import { NotificationModule } from './notification/notification.module';
+import { SignalModule } from './signal/signal.module';
 import { SignalLogEntity } from './signallog/entity/signalog.entity';
 import { SignalLogModule } from './signallog/signallog.module';
-import { TradingModule } from './trading/trading.module';
 import { UserEntity } from './user/entity/user.entity';
 import { UserConfigEntity } from './user/entity/userconfig.entity';
 import { UserModule } from './user/user.module';
+import { TradingModule } from './trading/trading.module';
 
 @Module({
   imports: [
@@ -50,11 +51,12 @@ import { UserModule } from './user/user.module';
         return config as any;
       },
     }),
-    TradingModule,
+    SignalModule,
     NotificationModule,
     BotModule,
     UserModule,
     SignalLogModule,
+    TradingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

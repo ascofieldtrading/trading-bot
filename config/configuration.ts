@@ -3,6 +3,10 @@ import { AppConfig } from '../src/common/interface';
 
 export default () =>
   ({
+    bingx: {
+      host: process.env.BINGX_HOST,
+      testHost: process.env.BINGX_TEST_HOST,
+    },
     binanceApiKey: process.env.BINANCE_API_KEY,
     binanceSecretKey: process.env.BINANCE_SECRET_KEY,
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,

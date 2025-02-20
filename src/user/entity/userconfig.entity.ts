@@ -34,6 +34,12 @@ export class UserConfigEntity {
   @Column({ nullable: true })
   secretKey: string;
 
+  @Column({ nullable: true, default: false })
+  autoPlaceOrder: boolean;
+
+  @Column({ nullable: true, default: false })
+  pollingSignal: boolean;
+
   @CreatedAtColumn()
   createdAt: Date;
 
